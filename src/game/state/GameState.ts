@@ -1,3 +1,4 @@
+import { GAME_CONFIG } from '../config/gameConfig';
 import type { Inventory } from '../logic/inventory';
 import type { Point } from '../logic/movement';
 
@@ -11,7 +12,11 @@ export interface ScreenTargetRequest extends Point {}
 
 export function createGameState(): GameState {
   return {
-    inventory: { carried: 0, barn: 0, capacity: 12 },
+    inventory: {
+      carried: 0,
+      barn: 0,
+      capacity: GAME_CONFIG.carryCapacity,
+    },
     harvestedTotal: 0,
     deliveredOnce: false,
   };
