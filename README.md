@@ -61,7 +61,7 @@ npm run check
 npm run build
 ```
 
-Vite writes the deployable static site to `dist/`. The configured base path is `/carry-and-thrive/`, so the bundle is suitable for the GitHub Pages project URL requested for this repository. Pushes to `main` run the Pages workflow, while pull requests run CI checks and a production build. In repository settings, configure **Pages → Source** to **GitHub Actions**.
+Vite writes the deployable static site to `dist/`. The configured base path is `/hurry-go-round/`, matching the repository and its GitHub Pages project URL, `https://<github-owner>.github.io/hurry-go-round/`. Pushes to `main` run the Pages workflow, while pull requests run CI checks and a production build. In repository settings, configure **Pages → Source** to **GitHub Actions**.
 
 Do not commit `dist/` or `node_modules/`; deployments publish the generated artifact directly from CI.
 
