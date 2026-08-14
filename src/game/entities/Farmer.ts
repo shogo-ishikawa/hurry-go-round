@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { palette } from '../art/palette';
+
 export type Facing = 'front' | 'back' | 'left' | 'right';
 
 export class Farmer extends Phaser.GameObjects.Container {
@@ -15,81 +16,264 @@ export class Farmer extends Phaser.GameObjects.Container {
   private carried = -1;
 
   constructor(scene: Phaser.Scene, x: number, y: number) {
-    const shadow = scene.add.ellipse(0, 2, 54, 20, palette.shadow, 0.28);
+    const shadow = scene.add.ellipse(0, 4, 68, 24, palette.shadow, 0.24);
     const stack = scene.add.graphics();
-    const leftLeg = scene.add.rectangle(-12, 4, 13, 28, palette.outline).setStrokeStyle(2, palette.outline);
-    const rightLeg = scene.add.rectangle(12, 4, 13, 28, palette.outline).setStrokeStyle(2, palette.outline);
-    const leftArm = scene.add.rectangle(-24, -17, 12, 30, palette.cream).setStrokeStyle(2, palette.outline);
-    const rightArm = scene.add.rectangle(24, -17, 12, 30, palette.cream).setStrokeStyle(2, palette.outline);
+    const leftLeg = scene.add.rectangle(-13, 4, 15, 34, palette.denimDark)
+      .setStrokeStyle(2.5, palette.outline);
+    const rightLeg = scene.add.rectangle(13, 4, 15, 34, palette.denimDark)
+      .setStrokeStyle(2.5, palette.outline);
+    const leftArm = scene.add.rectangle(-27, -20, 13, 33, palette.cream)
+      .setStrokeStyle(2.5, palette.outline);
+    const rightArm = scene.add.rectangle(27, -20, 13, 33, palette.cream)
+      .setStrokeStyle(2.5, palette.outline);
     const body = scene.add.graphics();
+
     super(scene, x, y, [shadow, stack, leftLeg, rightLeg, leftArm, rightArm, body]);
-    this.shadow = shadow; this.stack = stack.setScale(0.78); this.bodyGraphics = body.setScale(0.78);
-    this.leftLeg = leftLeg; this.rightLeg = rightLeg; this.leftArm = leftArm; this.rightArm = rightArm;
+    this.shadow = shadow;
+    this.stack = stack.setScale(0.88);
+    this.bodyGraphics = body.setScale(0.88);
+    this.leftLeg = leftLeg;
+    this.rightLeg = rightLeg;
+    this.leftArm = leftArm;
+    this.rightArm = rightArm;
+
     scene.add.existing(this);
-    this.setSize(56, 84).setScale(0.85);
-    this.drawBody(); this.setCarried(0);
+    this.setSize(68, 102).setScale(0.96);
+    this.drawBody();
+    this.setCarried(0);
   }
 
   setFacingFromVector(x: number, y: number): void {
-    const next: Facing = Math.abs(x) > Math.abs(y) ? (x < 0 ? 'left' : 'right') : (y < 0 ? 'back' : 'front');
-    if (next !== this.facing) { this.facing = next; this.drawBody(); this.drawStack(); }
+    if (Math.abs(x) < 0.001 && Math.abs(y) < 0.001) return;
+    const next: Facing = Math.abs(x) > Math.abs(y)
+      ? (x < 0 ? 'left' : 'right')
+      : (y < 0 ? 'back' : 'front');
+    if (next !== this.facing) {
+      this.facing = next;
+      this.drawBody();
+      this.drawStack();
+    }
   }
 
-  setCarried(count: number): void { if (count !== this.carried) { this.carried = count; this.drawStack(); } }
+  setCarried(count: number): void {
+    if (count !== this.carried) {
+      this.carried = count;
+      this.drawStack();
+    }
+  }
 
   playHarvestMotion(): void {
     this.scene.tweens.killTweensOf(this);
-    this.scene.tweens.add({ targets: this, angle: this.facing === 'left' ? -5 : 5, yoyo: true, duration: 90 });
+    const harvestAngle = this.facing === 'left' ? -6 : 6;
+    this.scene.tweens.add({
+      targets: this,
+      angle: harvestAngle,
+      scaleX: 0.93,
+      scaleY: 1.01,
+      yoyo: true,
+      duration: 95,
+      onComplete: () => this.setAngle(0).setScale(0.96),
+    });
   }
 
   animate(delta: number, moving: boolean): void {
-    this.phase += delta * (moving ? 0.012 : 0.0025);
-    const bob = Math.sin(this.phase) * (moving ? 3.2 : 1.1);
-    this.bodyGraphics.y = -58 + bob;
-    this.stack.y = -58 + bob;
-    const stride = moving ? Math.sin(this.phase) * 0.34 : 0;
-    this.leftLeg.setPosition(-12, 4 + bob).setRotation(stride);
-    this.rightLeg.setPosition(12, 4 + bob).setRotation(-stride);
-    this.leftArm.setPosition(-24, -17 + bob).setRotation(-stride * 0.7);
-    this.rightArm.setPosition(24, -17 + bob).setRotation(stride * 0.7);
-    this.bodyGraphics.setScale(0.78, 0.78 * (1 + (moving ? Math.abs(Math.sin(this.phase)) * 0.025 : 0)));
-    this.shadow.scaleX = 1 - Math.abs(bob) * 0.008;
-    this.setDepth(this.y + 80);
+    this.phase += delta * (moving ? 0.0125 : 0.0024);
+    const wave = Math.sin(this.phase);
+    const bob = wave * (moving ? 3.6 : 1.05);
+    const stride = moving ? wave * 0.36 : 0;
+    const armSwing = stride * 0.72;
+
+    this.bodyGraphics.y = -66 + bob;
+    this.stack.y = -66 + bob;
+    this.leftLeg.setPosition(-13, 4 + bob).setRotation(stride);
+    this.rightLeg.setPosition(13, 4 + bob).setRotation(-stride);
+    this.leftArm.setPosition(-27, -20 + bob).setRotation(-armSwing);
+    this.rightArm.setPosition(27, -20 + bob).setRotation(armSwing);
+    this.bodyGraphics.setScale(
+      0.88 * (1 - Math.abs(wave) * (moving ? 0.012 : 0)),
+      0.88 * (1 + Math.abs(wave) * (moving ? 0.022 : 0)),
+    );
+    this.shadow.setScale(1 - Math.abs(bob) * 0.009, 1 - Math.abs(bob) * 0.004);
+    this.setDepth(this.y + 90);
   }
 
   private drawBody(): void {
     const g = this.bodyGraphics.clear();
     const side = this.facing === 'left' ? -1 : this.facing === 'right' ? 1 : 0;
     const back = this.facing === 'back';
+    const profile = side !== 0;
+    const headX = side * 4;
+
     g.lineStyle(3, palette.outline, 1);
-    // overalls and shirt
-    g.fillStyle(palette.cream).fillRoundedRect(-25, 25, 50, 35, 16).strokeRoundedRect(-25, 25, 50, 35, 16);
-    g.fillStyle(palette.teal).fillRoundedRect(-18, 30, 36, 36, 12).strokeRoundedRect(-18, 30, 36, 36, 12);
-    g.lineBetween(-13, 30, -16, 20).lineBetween(13, 30, 16, 20);
-    // ponytail behind face
-    g.fillStyle(palette.barnDark).fillEllipse(-22 * (side || 1), 8, 17, 30).strokeEllipse(-22 * (side || 1), 8, 17, 30);
-    g.fillStyle(0xf3b984).fillCircle(side * 4, 10, 22).strokeCircle(side * 4, 10, 22);
-    if (!back) {
-      g.fillStyle(palette.outline).fillCircle(side * 8 - 7, 8, 2.2).fillCircle(side * 8 + 7, 8, 2.2);
-      g.lineStyle(2, palette.barnDark).beginPath().arc(side * 8, 14, 6, 0.2, Math.PI - 0.2).strokePath();
+
+    // Ponytail and braid sit behind the face and hat.
+    const ponytailX = profile ? -side * 28 : 24;
+    g.fillStyle(palette.hair)
+      .fillEllipse(ponytailX, 7, 20, 34)
+      .strokeEllipse(ponytailX, 7, 20, 34);
+    g.fillStyle(palette.hairLight)
+      .fillCircle(ponytailX + (profile ? -side * 2 : 2), 21, 9)
+      .strokeCircle(ponytailX + (profile ? -side * 2 : 2), 21, 9);
+    g.fillStyle(palette.teal).fillRoundedRect(ponytailX - 6, 27, 12, 6, 3);
+
+    // Neck, shirt, and rounded overall silhouette.
+    g.fillStyle(palette.skinShadow)
+      .fillRoundedRect(-8 + headX, 27, 16, 13, 5)
+      .strokeRoundedRect(-8 + headX, 27, 16, 13, 5);
+    g.fillStyle(palette.cream)
+      .fillRoundedRect(-29, 34, 58, 40, 18)
+      .strokeRoundedRect(-29, 34, 58, 40, 18);
+    g.fillStyle(palette.denim)
+      .fillRoundedRect(-21, 40, 42, 39, 12)
+      .strokeRoundedRect(-21, 40, 42, 39, 12);
+
+    if (back) {
+      g.lineStyle(4, palette.denimDark)
+        .lineBetween(-16, 38, -10, 60)
+        .lineBetween(16, 38, 10, 60);
+      g.fillStyle(palette.denimDark).fillRoundedRect(-15, 57, 30, 13, 5);
+      g.lineStyle(2, palette.creamDark).lineBetween(-10, 64, 10, 64);
+    } else {
+      g.lineStyle(4, palette.denimDark)
+        .lineBetween(-17, 39, -13, 56)
+        .lineBetween(17, 39, 13, 56);
+      g.fillStyle(palette.hatLight)
+        .fillCircle(-13, 47, 3.2)
+        .fillCircle(13, 47, 3.2);
+      g.fillStyle(palette.denimDark)
+        .fillRoundedRect(-13, 55, 26, 16, 5)
+        .strokeRoundedRect(-13, 55, 26, 16, 5);
+      g.lineStyle(2, palette.tealLight)
+        .lineBetween(-8, 60, 8, 60)
+        .lineBetween(0, 57, 0, 68);
     }
-    // brim and straw hat
-    g.lineStyle(3, palette.outline).fillStyle(palette.wheatLight).fillEllipse(side * 3, -7, 60, 18).strokeEllipse(side * 3, -7, 60, 18);
-    g.fillStyle(palette.wheat).fillRoundedRect(-20 + side * 3, -30, 40, 25, 12).strokeRoundedRect(-20 + side * 3, -30, 40, 25, 12);
-    g.fillStyle(palette.teal).fillRect(-20 + side * 3, -10, 40, 6);
+
+    // Head and ears.
+    if (!back) {
+      g.fillStyle(palette.skinShadow);
+      if (!profile) {
+        g.fillCircle(-22, 10, 7).strokeCircle(-22, 10, 7);
+        g.fillCircle(22, 10, 7).strokeCircle(22, 10, 7);
+      } else {
+        g.fillCircle(headX + side * 20, 11, 7).strokeCircle(headX + side * 20, 11, 7);
+      }
+    }
+    g.fillStyle(back ? palette.hair : palette.skin)
+      .fillEllipse(headX, 10, profile ? 41 : 46, 43)
+      .strokeEllipse(headX, 10, profile ? 41 : 46, 43);
+
+    // Hair cap and fringe.
+    g.fillStyle(palette.hair);
+    if (back) {
+      g.fillEllipse(headX, 7, 42, 39).strokeEllipse(headX, 7, 42, 39);
+      g.lineStyle(2, palette.hairLight)
+        .lineBetween(-13, 2, -8, 23)
+        .lineBetween(0, -2, 2, 24)
+        .lineBetween(13, 2, 11, 22);
+    } else if (profile) {
+      g.fillEllipse(headX - side * 7, -2, 34, 21).strokeEllipse(headX - side * 7, -2, 34, 21);
+      g.fillTriangle(headX - side * 18, 0, headX + side * 3, -8, headX - side * 4, 10);
+    } else {
+      g.fillEllipse(headX, -3, 44, 22).strokeEllipse(headX, -3, 44, 22);
+      g.fillTriangle(-20, 0, -5, -8, -10, 10);
+      g.fillTriangle(18, 0, 4, -8, 10, 9);
+    }
+
+    // Friendly face with eyebrows, highlights, blush, nose, and smile.
+    if (!back) {
+      const eyeOffset = profile ? side * 8 : 0;
+      g.lineStyle(2.2, palette.hair);
+      if (profile) {
+        const eyeX = headX + side * 7;
+        g.lineBetween(eyeX - 4, 4, eyeX + 3, 3);
+        g.fillStyle(palette.outline).fillCircle(eyeX, 8, 2.6);
+        g.fillStyle(palette.white).fillCircle(eyeX - side * 0.8, 7.2, 0.9);
+        g.lineStyle(2, palette.skinShadow)
+          .beginPath()
+          .moveTo(headX + side * 14, 11)
+          .lineTo(headX + side * 18, 14)
+          .lineTo(headX + side * 14, 15)
+          .strokePath();
+        g.fillStyle(palette.blush).fillEllipse(headX + side * 9, 17, 9, 4);
+        g.lineStyle(2, palette.barnDark)
+          .beginPath()
+          .arc(headX + side * 7, 17, 6, 0.25, Math.PI - 0.25)
+          .strokePath();
+      } else {
+        for (const eyeX of [-8, 8]) {
+          g.lineBetween(eyeX - 4, 3, eyeX + 4, 2);
+          g.fillStyle(palette.outline).fillCircle(eyeX, 8, 2.6);
+          g.fillStyle(palette.white).fillCircle(eyeX - 0.8, 7.1, 0.9);
+        }
+        g.lineStyle(2, palette.skinShadow).lineBetween(eyeOffset, 10, eyeOffset - 1, 14);
+        g.fillStyle(palette.blush)
+          .fillEllipse(-14, 17, 9, 4)
+          .fillEllipse(14, 17, 9, 4);
+        g.lineStyle(2.2, palette.barnDark)
+          .beginPath()
+          .arc(0, 15, 7, 0.2, Math.PI - 0.2)
+          .strokePath();
+      }
+    }
+
+    // Wide woven hat, teal ribbon, stitching, and a small flower pin.
+    g.lineStyle(3, palette.outline)
+      .fillStyle(palette.hatLight)
+      .fillEllipse(headX + side * 2, -10, profile ? 61 : 68, 19)
+      .strokeEllipse(headX + side * 2, -10, profile ? 61 : 68, 19);
+    g.fillStyle(palette.hat)
+      .fillRoundedRect(-22 + headX, -39, 44, 30, 13)
+      .strokeRoundedRect(-22 + headX, -39, 44, 30, 13);
+    g.fillStyle(palette.teal).fillRoundedRect(-22 + headX, -16, 44, 7, 3);
+    g.lineStyle(1.5, palette.hatLight, 0.85)
+      .lineBetween(-14 + headX, -34, 14 + headX, -34)
+      .lineBetween(-17 + headX, -27, 17 + headX, -27);
+    if (!back) {
+      g.fillStyle(palette.flower)
+        .fillCircle(16 + headX, -18, 4)
+        .fillCircle(21 + headX, -17, 4)
+        .fillCircle(18 + headX, -13, 4);
+      g.fillStyle(palette.highlight).fillCircle(18 + headX, -16, 2.5);
+    }
   }
 
   private drawStack(): void {
     const g = this.stack.clear();
     if (this.carried <= 0) return;
-    const behind = this.facing === 'back';
-    const xShift = this.facing === 'left' ? 23 : this.facing === 'right' ? -23 : behind ? 20 : -24;
+
+    const back = this.facing === 'back';
+    const xShift = this.facing === 'left'
+      ? 27
+      : this.facing === 'right'
+        ? -27
+        : back
+          ? 24
+          : -27;
+
+    // A small woven carrier gives the bundles a clear attachment point.
+    g.lineStyle(2.5, palette.outline)
+      .fillStyle(palette.path)
+      .fillRoundedRect(xShift - 19, 36, 38, 29, 7)
+      .strokeRoundedRect(xShift - 19, 36, 38, 29, 7);
+    g.lineStyle(2, palette.soilDark, 0.8)
+      .lineBetween(xShift - 15, 45, xShift + 15, 45)
+      .lineBetween(xShift - 14, 54, xShift + 14, 54)
+      .lineBetween(xShift - 8, 38, xShift - 8, 63)
+      .lineBetween(xShift + 8, 38, xShift + 8, 63);
+
     for (let i = 0; i < this.carried; i += 1) {
-      const row = Math.floor(i / 3); const col = i % 3;
-      const x = xShift + (col - 1) * 10 + (row % 2) * 4;
-      const y = 49 - row * 11;
-      g.lineStyle(1.5, palette.outline).fillStyle(palette.wheat).fillRoundedRect(x - 6, y - 6, 13, 10, 3).strokeRoundedRect(x - 6, y - 6, 13, 10, 3);
-      g.lineStyle(2, palette.wheatLight).lineBetween(x, y - 6, x + 3, y - 13);
+      const row = Math.floor(i / 3);
+      const col = i % 3;
+      const x = xShift + (col - 1) * 12 + (row % 2) * 4;
+      const y = 38 - row * 12;
+      g.lineStyle(1.7, palette.outline)
+        .fillStyle(palette.wheat)
+        .fillRoundedRect(x - 7, y - 6, 15, 11, 4)
+        .strokeRoundedRect(x - 7, y - 6, 15, 11, 4);
+      g.lineStyle(2, palette.wheatLight)
+        .lineBetween(x - 2, y - 6, x + 2, y - 15)
+        .lineBetween(x + 3, y - 5, x + 7, y - 13);
+      g.lineStyle(2, palette.teal).lineBetween(x - 6, y, x + 7, y);
     }
   }
 }

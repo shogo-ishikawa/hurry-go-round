@@ -10,11 +10,13 @@ import { GAME_EVENTS, type GameState } from '../state/GameState';
 
 let portraitNoticeShown = false;
 
-interface TapStart {
+interface PointerGesture {
   pointerId: number;
-  x: number;
-  y: number;
+  startX: number;
+  startY: number;
   startedAt: number;
+  dragging: boolean;
+  lastEmitAt: number;
 }
 
 export class UIScene extends Phaser.Scene {
@@ -26,7 +28,7 @@ export class UIScene extends Phaser.Scene {
   private moveHint!: Phaser.GameObjects.Text;
   private fullBadge!: Phaser.GameObjects.Text;
   private versionText!: Phaser.GameObjects.Text;
-  private tapStart: TapStart | null = null;
+  private pointerGesture: PointerGesture | null = null;
   private joystickEnabled = false;
 
   constructor() {
@@ -56,7 +58,7 @@ export class UIScene extends Phaser.Scene {
       align: 'center',
       wordWrap: { width: 340 },
     }).setOrigin(0.5);
-    this.moveHint = this.add.text(0, 0, 'Hold WASD / arrows • Click the farm to move', {
+    this.moveHint = this.add.text(0, 0, 'Hold the joystick or keys • Click, tap, or drag the farm', {
       fontFamily: 'system-ui',
       fontSize: '16px',
       color: '#fff4d8',
@@ -78,10 +80,11 @@ export class UIScene extends Phaser.Scene {
     this.game.events.on(GAME_EVENTS.full, this.showFull, this);
     this.game.events.on(GAME_EVENTS.tutorial, this.updateTutorial, this);
     this.game.events.on(GAME_EVENTS.playerMoved, this.fadeMoveHint, this);
-    this.input.on('pointerdown', this.beginTap, this);
-    this.input.on('pointerup', this.finishTap, this);
-    this.input.on('pointerupoutside', this.cancelTap, this);
-    this.input.on('gameout', this.cancelTap, this);
+    this.input.on('pointerdown', this.beginPointerGesture, this);
+    this.input.on('pointermove', this.updatePointerGesture, this);
+    this.input.on('pointerup', this.finishPointerGesture, this);
+    this.input.on('pointerupoutside', this.cancelPointerGesture, this);
+    this.input.on('gameout', this.cancelPointerGesture, this);
     this.scale.on(Phaser.Scale.Events.RESIZE, this.layout, this);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, this.cleanup, this);
 
@@ -90,7 +93,7 @@ export class UIScene extends Phaser.Scene {
   }
 
   resetInput(): void {
-    this.tapStart = null;
+    this.pointerGesture = null;
     this.joystick?.reset();
   }
 
@@ -98,40 +101,69 @@ export class UIScene extends Phaser.Scene {
     this.game.events.emit(GAME_EVENTS.direction, direction);
   };
 
-  private beginTap(pointer: Phaser.Input.Pointer): void {
+  private beginPointerGesture(pointer: Phaser.Input.Pointer): void {
     const point = { x: pointer.x, y: pointer.y };
-    const viewport = { width: this.scale.width, height: this.scale.height };
-    if (isPointOverReservedUi(point, viewport, this.joystickEnabled)) {
-      this.tapStart = null;
+    if (this.isReserved(point)) {
+      this.pointerGesture = null;
       return;
     }
 
-    this.tapStart = {
+    this.pointerGesture = {
       pointerId: pointer.id,
-      x: pointer.x,
-      y: pointer.y,
+      startX: pointer.x,
+      startY: pointer.y,
       startedAt: this.time.now,
+      dragging: false,
+      lastEmitAt: 0,
     };
   }
 
-  private finishTap(pointer: Phaser.Input.Pointer): void {
-    const start = this.tapStart;
-    this.tapStart = null;
-    if (!start || start.pointerId !== pointer.id) return;
+  private updatePointerGesture(pointer: Phaser.Input.Pointer): void {
+    const gesture = this.pointerGesture;
+    if (!gesture || gesture.pointerId !== pointer.id || !pointer.isDown) return;
 
-    const travel = Math.hypot(pointer.x - start.x, pointer.y - start.y);
-    const duration = this.time.now - start.startedAt;
-    if (travel > 16 || duration > 650) return;
+    const travel = Math.hypot(pointer.x - gesture.startX, pointer.y - gesture.startY);
+    if (!gesture.dragging && travel < 14) return;
+    gesture.dragging = true;
 
     const point = { x: pointer.x, y: pointer.y };
-    const viewport = { width: this.scale.width, height: this.scale.height };
-    if (isPointOverReservedUi(point, viewport, this.joystickEnabled)) return;
+    if (this.isReserved(point)) return;
+    if (this.time.now - gesture.lastEmitAt < 45) return;
 
+    gesture.lastEmitAt = this.time.now;
     this.game.events.emit(GAME_EVENTS.moveTarget, point);
   }
 
-  private cancelTap(): void {
-    this.tapStart = null;
+  private finishPointerGesture(pointer: Phaser.Input.Pointer): void {
+    const gesture = this.pointerGesture;
+    this.pointerGesture = null;
+    if (!gesture || gesture.pointerId !== pointer.id) return;
+
+    const point = { x: pointer.x, y: pointer.y };
+    if (this.isReserved(point)) return;
+
+    if (gesture.dragging) {
+      this.game.events.emit(GAME_EVENTS.moveTarget, point);
+      return;
+    }
+
+    const travel = Math.hypot(pointer.x - gesture.startX, pointer.y - gesture.startY);
+    const duration = this.time.now - gesture.startedAt;
+    if (travel <= 16 && duration <= 700) {
+      this.game.events.emit(GAME_EVENTS.moveTarget, point);
+    }
+  }
+
+  private cancelPointerGesture(): void {
+    this.pointerGesture = null;
+  }
+
+  private isReserved(point: Point): boolean {
+    return isPointOverReservedUi(
+      point,
+      { width: this.scale.width, height: this.scale.height },
+      this.joystickEnabled,
+    );
   }
 
   private fadeMoveHint(): void {
@@ -180,12 +212,13 @@ export class UIScene extends Phaser.Scene {
     this.joystickEnabled = shouldEnableVirtualJoystick(width, navigator.maxTouchPoints);
     this.joystick?.layout();
     this.joystick?.setEnabled(this.joystickEnabled);
+    const touchLike = navigator.maxTouchPoints > 0 || width < 900;
     this.moveHint.setText(
-      this.joystickEnabled
-        ? 'Hold the joystick • Tap the farm to move'
-        : 'Hold WASD / arrows • Click the farm to move',
+      touchLike
+        ? 'Hold the joystick • Tap or drag the farm to move'
+        : 'Hold joystick / WASD / arrows • Click or drag the farm',
     );
-    this.cancelTap();
+    this.cancelPointerGesture();
     this.showPortraitNotice();
   }
 
@@ -213,10 +246,11 @@ export class UIScene extends Phaser.Scene {
     this.game.events.off(GAME_EVENTS.full, this.showFull, this);
     this.game.events.off(GAME_EVENTS.tutorial, this.updateTutorial, this);
     this.game.events.off(GAME_EVENTS.playerMoved, this.fadeMoveHint, this);
-    this.input.off('pointerdown', this.beginTap, this);
-    this.input.off('pointerup', this.finishTap, this);
-    this.input.off('pointerupoutside', this.cancelTap, this);
-    this.input.off('gameout', this.cancelTap, this);
+    this.input.off('pointerdown', this.beginPointerGesture, this);
+    this.input.off('pointermove', this.updatePointerGesture, this);
+    this.input.off('pointerup', this.finishPointerGesture, this);
+    this.input.off('pointerupoutside', this.cancelPointerGesture, this);
+    this.input.off('gameout', this.cancelPointerGesture, this);
     this.scale.off(Phaser.Scale.Events.RESIZE, this.layout, this);
   }
 }
