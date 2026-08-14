@@ -6,9 +6,9 @@ export interface ViewportSize {
 }
 
 export const INPUT_LAYOUT = {
-  joystickCenterX: 92,
-  joystickBottomMargin: 92,
-  joystickHitRadius: 86,
+  joystickCenterX: 98,
+  joystickBottomMargin: 98,
+  joystickHitRadius: 92,
   hudWidth: 250,
   hudHeight: 108,
   tutorialHeight: 92,
@@ -17,13 +17,16 @@ export const INPUT_LAYOUT = {
 } as const;
 
 export function shouldEnableVirtualJoystick(viewportWidth: number, maxTouchPoints: number): boolean {
-  return maxTouchPoints > 0 || viewportWidth < 900;
+  return Number.isFinite(viewportWidth)
+    && viewportWidth > 0
+    && Number.isFinite(maxTouchPoints)
+    && maxTouchPoints >= 0;
 }
 
 export function getJoystickCenter(viewportHeight: number): Point {
   return {
     x: INPUT_LAYOUT.joystickCenterX,
-    y: Math.max(70, viewportHeight - INPUT_LAYOUT.joystickBottomMargin),
+    y: Math.max(76, viewportHeight - INPUT_LAYOUT.joystickBottomMargin),
   };
 }
 
@@ -46,7 +49,7 @@ export function isPointOverReservedUi(
 
   if (
     point.y >= viewport.height - INPUT_LAYOUT.bottomHintHeight
-    && Math.abs(point.x - viewport.width / 2) <= 230
+    && Math.abs(point.x - viewport.width / 2) <= 260
   ) return true;
 
   if (joystickEnabled) {
