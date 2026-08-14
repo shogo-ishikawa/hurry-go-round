@@ -8,7 +8,11 @@ Explore a 2000 × 1400 original farm as a female farmer. Approach mature wheat t
 
 The farmer supports held-direction movement and point navigation at the same time. A dedicated lower-left joystick remains available on PC, tablet, and mobile; WASD and arrow keys also work on desktop. Clicking or tapping the farm sets a destination, while dragging across the farm continually updates the destination. Manual keyboard or joystick input immediately cancels point movement.
 
-The farmer uses original layered vector art with a woven hat, flower pin, ponytail, expressive face, detailed overalls, walk animation, shadow, carrier basket, and visible wheat bundles. The farm includes two wheat plots, layered grass and soil, a curved route, barn and loading platform, pond, fences, trees, flowers, crates, a barrel, and in-world guidance. A responsive HUD tracks carried and stored wheat while a short tutorial introduces the loop.
+The farmer uses original layered vector art with a woven hat, flower pin, ponytail, expressive face, detailed overalls, walk animation, shadow, carrier basket, and visible wheat bundles. The empty basket remains visible before harvesting, then each collected unit adds one physical bundle to the stack. At 12 units, a red tie and flag mark the physical load as full.
+
+Carry capacity is also shown in a synchronized responsive HUD. Twelve wheat-marked slots fill one by one, the remaining space is displayed numerically, the panel changes emphasis near capacity, and a persistent `PACK FULL` banner remains until unloading begins. The barn transfer removes both logical and visible bundles one at a time.
+
+The farm includes two wheat plots, layered grass and soil, a curved route, barn and loading platform, pond, fences, trees, flowers, crates, a barrel, and in-world guidance. A responsive HUD tracks carried and stored wheat while a short tutorial introduces the loop.
 
 ## Setup and commands
 
@@ -47,7 +51,7 @@ src/game/
 ├── config/       centralized world and gameplay parameters
 ├── entities/     farmer and crop visual entities
 ├── input/        virtual joystick, pointer gestures, and responsive input layout
-├── logic/        pure camera, crop, inventory, and movement rules plus tests
+├── logic/        pure camera, crop, inventory, capacity, and movement rules plus tests
 ├── scenes/       separated world gameplay and camera-independent UI
 └── state/        single gameplay-state model and event contract
 docs/

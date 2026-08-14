@@ -1,5 +1,6 @@
 import Phaser from 'phaser';
 import { palette } from '../art/palette';
+import { GAME_CONFIG } from '../config/gameConfig';
 
 export type Facing = 'front' | 'back' | 'left' | 'right';
 
@@ -30,7 +31,7 @@ export class Farmer extends Phaser.GameObjects.Container {
 
     super(scene, x, y, [shadow, stack, leftLeg, rightLeg, leftArm, rightArm, body]);
     this.shadow = shadow;
-    this.stack = stack.setScale(0.88);
+    this.stack = stack.setScale(0.94);
     this.bodyGraphics = body.setScale(0.88);
     this.leftLeg = leftLeg;
     this.rightLeg = rightLeg;
@@ -56,8 +57,11 @@ export class Farmer extends Phaser.GameObjects.Container {
   }
 
   setCarried(count: number): void {
-    if (count !== this.carried) {
-      this.carried = count;
+    const nextCount = Number.isFinite(count)
+      ? Phaser.Math.Clamp(Math.floor(count), 0, GAME_CONFIG.carryCapacity)
+      : 0;
+    if (nextCount !== this.carried) {
+      this.carried = nextCount;
       this.drawStack();
     }
   }
@@ -239,41 +243,63 @@ export class Farmer extends Phaser.GameObjects.Container {
 
   private drawStack(): void {
     const g = this.stack.clear();
-    if (this.carried <= 0) return;
-
+    const visibleCount = Phaser.Math.Clamp(this.carried, 0, GAME_CONFIG.carryCapacity);
+    const full = visibleCount >= GAME_CONFIG.carryCapacity;
+    const nearlyFull = visibleCount >= Math.ceil(GAME_CONFIG.carryCapacity * 0.75);
     const back = this.facing === 'back';
     const xShift = this.facing === 'left'
-      ? 27
+      ? 29
       : this.facing === 'right'
-        ? -27
+        ? -29
         : back
-          ? 24
-          : -27;
+          ? 25
+          : -29;
+    const carrierOutline = full
+      ? palette.barn
+      : nearlyFull
+        ? palette.soilDark
+        : palette.outline;
 
-    // A small woven carrier gives the bundles a clear attachment point.
-    g.lineStyle(2.5, palette.outline)
+    // Shoulder straps and an empty basket remain visible before the first harvest.
+    g.lineStyle(3, palette.soilDark, 0.72)
+      .lineBetween(xShift - 15, 37, xShift - 11, 64)
+      .lineBetween(xShift + 15, 37, xShift + 11, 64);
+    g.lineStyle(2.7, carrierOutline)
       .fillStyle(palette.path)
-      .fillRoundedRect(xShift - 19, 36, 38, 29, 7)
-      .strokeRoundedRect(xShift - 19, 36, 38, 29, 7);
-    g.lineStyle(2, palette.soilDark, 0.8)
-      .lineBetween(xShift - 15, 45, xShift + 15, 45)
-      .lineBetween(xShift - 14, 54, xShift + 14, 54)
-      .lineBetween(xShift - 8, 38, xShift - 8, 63)
-      .lineBetween(xShift + 8, 38, xShift + 8, 63);
+      .fillRoundedRect(xShift - 22, 34, 44, 33, 8)
+      .strokeRoundedRect(xShift - 22, 34, 44, 33, 8);
+    g.fillStyle(palette.soilDark, visibleCount === 0 ? 0.22 : 0.08)
+      .fillEllipse(xShift, 43, 31, 12);
+    g.lineStyle(2, palette.soilDark, 0.82)
+      .lineBetween(xShift - 18, 44, xShift + 18, 44)
+      .lineBetween(xShift - 17, 54, xShift + 17, 54)
+      .lineBetween(xShift - 16, 63, xShift + 16, 63)
+      .lineBetween(xShift - 9, 36, xShift - 9, 65)
+      .lineBetween(xShift + 9, 36, xShift + 9, 65);
 
-    for (let i = 0; i < this.carried; i += 1) {
-      const row = Math.floor(i / 3);
-      const col = i % 3;
-      const x = xShift + (col - 1) * 12 + (row % 2) * 4;
-      const y = 38 - row * 12;
-      g.lineStyle(1.7, palette.outline)
+    for (let index = 0; index < visibleCount; index += 1) {
+      const row = Math.floor(index / 3);
+      const column = index % 3;
+      const x = xShift + (column - 1) * 13 + (row % 2) * 4;
+      const y = 36 - row * 13;
+      g.lineStyle(1.8, palette.outline)
         .fillStyle(palette.wheat)
         .fillRoundedRect(x - 7, y - 6, 15, 11, 4)
         .strokeRoundedRect(x - 7, y - 6, 15, 11, 4);
-      g.lineStyle(2, palette.wheatLight)
-        .lineBetween(x - 2, y - 6, x + 2, y - 15)
-        .lineBetween(x + 3, y - 5, x + 7, y - 13);
+      g.lineStyle(2.2, palette.wheatLight)
+        .lineBetween(x - 3, y - 6, x + 1, y - 16)
+        .lineBetween(x + 2, y - 5, x + 7, y - 14);
       g.lineStyle(2, palette.teal).lineBetween(x - 6, y, x + 7, y);
+    }
+
+    if (full) {
+      // A red tie and flag make the physical stack read as unmistakably full.
+      g.lineStyle(3, palette.barn)
+        .lineBetween(xShift - 19, 1, xShift + 19, 1);
+      g.fillStyle(palette.barn)
+        .fillTriangle(xShift + 18, -4, xShift + 30, 1, xShift + 18, 7);
+      g.lineStyle(1.5, palette.outline)
+        .strokeTriangle(xShift + 18, -4, xShift + 30, 1, xShift + 18, 7);
     }
   }
 }

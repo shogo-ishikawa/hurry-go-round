@@ -2,9 +2,12 @@ import Phaser from 'phaser';
 import { palette } from '../art/palette';
 import { VirtualJoystick } from '../input/VirtualJoystick';
 import {
+  getTutorialCenter,
+  isCompactHud,
   isPointOverReservedUi,
   shouldEnableVirtualJoystick,
 } from '../input/inputLayout';
+import { getCarryCapacityView, type CarryCapacityView } from '../logic/carryCapacity';
 import type { Point } from '../logic/movement';
 import { GAME_EVENTS, type GameState } from '../state/GameState';
 
@@ -19,17 +22,29 @@ interface PointerGesture {
   lastEmitAt: number;
 }
 
+function toCssColor(color: number): string {
+  return `#${color.toString(16).padStart(6, '0')}`;
+}
+
 export class UIScene extends Phaser.Scene {
   private carriedText!: Phaser.GameObjects.Text;
+  private capacityStatusText!: Phaser.GameObjects.Text;
   private barnText!: Phaser.GameObjects.Text;
   private tutorial!: Phaser.GameObjects.Text;
   private panel!: Phaser.GameObjects.Graphics;
+  private capacityMeter!: Phaser.GameObjects.Graphics;
   private joystick!: VirtualJoystick;
   private moveHint!: Phaser.GameObjects.Text;
   private fullBadge!: Phaser.GameObjects.Text;
   private versionText!: Phaser.GameObjects.Text;
   private pointerGesture: PointerGesture | null = null;
   private joystickEnabled = false;
+  private compactHud = false;
+  private hudPanelWidth = 300;
+  private hudPanelHeight = 108;
+  private carried = 0;
+  private capacity = 12;
+  private barnStored = 0;
 
   constructor() {
     super('ui');
@@ -37,6 +52,7 @@ export class UIScene extends Phaser.Scene {
 
   create(): void {
     this.panel = this.add.graphics();
+    this.capacityMeter = this.add.graphics();
     const style: Phaser.Types.GameObjects.Text.TextStyle = {
       fontFamily: 'system-ui',
       fontSize: '20px',
@@ -44,8 +60,17 @@ export class UIScene extends Phaser.Scene {
       fontStyle: 'bold',
     };
 
-    this.carriedText = this.add.text(28, 22, 'Carried  0 / 12', style);
-    this.barnText = this.add.text(28, 54, 'Barn  0', style);
+    this.carriedText = this.add.text(28, 22, 'PACK  0 / 12', style);
+    this.capacityStatusText = this.add.text(0, 24, '12 LEFT', {
+      ...style,
+      fontSize: '14px',
+      color: '#755c49',
+    }).setOrigin(1, 0);
+    this.barnText = this.add.text(28, 78, 'BARN  0 WHEAT', {
+      ...style,
+      fontSize: '16px',
+      color: '#755c49',
+    });
     this.versionText = this.add.text(0, 0, 'v0.2.0', {
       ...style,
       fontSize: '15px',
@@ -65,7 +90,7 @@ export class UIScene extends Phaser.Scene {
       backgroundColor: '#49382ed9',
       padding: { x: 14, y: 9 },
     }).setOrigin(0.5);
-    this.fullBadge = this.add.text(0, 0, 'FULL — DELIVER TO BARN', {
+    this.fullBadge = this.add.text(0, 0, 'PACK FULL — DELIVER TO BARN', {
       fontFamily: 'system-ui',
       fontSize: '20px',
       fontStyle: 'bold',
@@ -172,22 +197,126 @@ export class UIScene extends Phaser.Scene {
   }
 
   private updateState(state: GameState): void {
-    this.carriedText.setText(`Carried  ${state.inventory.carried} / ${state.inventory.capacity}`);
-    this.barnText.setText(`Barn  ${state.inventory.barn}`);
+    this.carried = state.inventory.carried;
+    this.capacity = state.inventory.capacity;
+    this.barnStored = state.inventory.barn;
+    this.refreshInventoryHud();
+  }
+
+  private refreshInventoryHud(): void {
+    const view = getCarryCapacityView(this.carried, this.capacity);
+    const emphasisColor = view.level === 'full'
+      ? palette.barn
+      : view.level === 'near-full'
+        ? palette.soilDark
+        : palette.outline;
+
+    this.carriedText
+      .setText(`PACK  ${view.carried} / ${view.capacity}`)
+      .setColor(toCssColor(emphasisColor));
+    this.capacityStatusText
+      .setText(view.level === 'full' ? 'FULL' : `${view.remaining} LEFT`)
+      .setColor(toCssColor(emphasisColor));
+    this.barnText.setText(`BARN  ${this.barnStored} WHEAT`);
+
+    if (view.level === 'full') {
+      this.fullBadge.setAlpha(1);
+    } else {
+      this.tweens.killTweensOf(this.fullBadge);
+      this.fullBadge.setAlpha(0).setScale(1);
+      this.carriedText.setScale(1);
+      this.capacityStatusText.setScale(1);
+    }
+
+    this.drawInventoryPanel(view);
+  }
+
+  private drawInventoryPanel(view: CarryCapacityView): void {
+    const panelBorder = view.level === 'full'
+      ? palette.barn
+      : view.level === 'near-full'
+        ? palette.wheat
+        : palette.creamDark;
+    const accent = view.level === 'full'
+      ? palette.barn
+      : view.level === 'near-full'
+        ? palette.wheat
+        : palette.teal;
+
+    this.panel.clear()
+      .fillStyle(palette.cream, 0.95)
+      .fillRoundedRect(14, 14, this.hudPanelWidth, this.hudPanelHeight, 18)
+      .lineStyle(3, panelBorder)
+      .strokeRoundedRect(14, 14, this.hudPanelWidth, this.hudPanelHeight, 18)
+      .fillStyle(accent, 0.95)
+      .fillRoundedRect(14, 14, this.hudPanelWidth, 7, 5);
+
+    const slotCount = Math.max(1, Math.min(view.capacity, 12));
+    const filledSlots = view.capacity <= 12
+      ? Math.min(view.carried, slotCount)
+      : Math.round(view.ratio * slotCount);
+    const columns = this.compactHud ? 6 : 12;
+    const slotWidth = this.compactHud ? 25 : 18;
+    const slotHeight = 15;
+    const gapX = this.compactHud ? 5 : 4;
+    const gapY = 5;
+    const startX = 28;
+    const startY = 52;
+
+    this.capacityMeter.clear();
+    for (let index = 0; index < slotCount; index += 1) {
+      const row = Math.floor(index / columns);
+      const column = index % columns;
+      const x = startX + column * (slotWidth + gapX);
+      const y = startY + row * (slotHeight + gapY);
+      const filled = index < filledSlots;
+      const borderColor = view.level === 'full'
+        ? palette.barn
+        : view.level === 'near-full' && !filled
+          ? palette.barnDark
+          : palette.outline;
+
+      this.capacityMeter
+        .fillStyle(filled ? palette.wheatLight : palette.creamDark, filled ? 1 : 0.52)
+        .fillRoundedRect(x, y, slotWidth, slotHeight, 4)
+        .lineStyle(1.5, borderColor, filled ? 0.9 : 0.45)
+        .strokeRoundedRect(x, y, slotWidth, slotHeight, 4);
+
+      if (filled) {
+        const centerX = x + slotWidth / 2;
+        this.capacityMeter
+          .lineStyle(1.4, palette.soilDark, 0.78)
+          .lineBetween(centerX, y + 3, centerX, y + slotHeight - 3)
+          .lineBetween(centerX, y + 6, centerX - 3, y + 4)
+          .lineBetween(centerX, y + 8, centerX + 3, y + 6);
+      }
+    }
   }
 
   private showFull(): void {
-    this.fullBadge.setAlpha(1).setScale(1.12);
-    this.tweens.add({ targets: this.fullBadge, alpha: 0, scale: 1, delay: 900, duration: 500 });
-    this.tweens.add({ targets: this.carriedText, scale: 1.16, yoyo: true, duration: 170 });
+    this.tweens.killTweensOf(this.fullBadge);
+    this.fullBadge.setAlpha(1).setScale(1);
+    this.tweens.add({
+      targets: this.fullBadge,
+      scale: 1.1,
+      duration: 180,
+      yoyo: true,
+      repeat: 1,
+    });
+    this.tweens.add({
+      targets: [this.carriedText, this.capacityStatusText],
+      scale: 1.1,
+      yoyo: true,
+      duration: 170,
+    });
   }
 
   private updateTutorial(stage: number): void {
     const messages = [
       'Follow the golden path to the wheat',
-      'Wheat stacks on your pack automatically',
-      'Your pack is filling — head to the red barn',
-      'Delivery complete — keep the round going!',
+      'Wheat appears on your back and fills the pack meter',
+      'Your pack is nearly full — head to the red barn',
+      'Delivery complete — your pack has space again!',
     ];
     this.tutorial.setText(messages[Math.min(stage, messages.length - 1)] ?? '');
     if (stage >= 3) {
@@ -198,16 +327,32 @@ export class UIScene extends Phaser.Scene {
   private layout(): void {
     const width = this.scale.width;
     const height = this.scale.height;
+    const viewport = { width, height };
 
-    this.panel.clear()
-      .fillStyle(palette.cream, 0.94)
-      .fillRoundedRect(14, 14, 225, 77, 18)
-      .lineStyle(3, palette.creamDark)
-      .strokeRoundedRect(14, 14, 225, 77, 18);
+    this.compactHud = isCompactHud(width);
+    this.hudPanelWidth = this.compactHud ? 220 : 300;
+    this.hudPanelHeight = this.compactHud ? 128 : 108;
+
+    this.carriedText
+      .setPosition(28, 22)
+      .setFontSize(this.compactHud ? 18 : 20);
+    this.capacityStatusText
+      .setPosition(14 + this.hudPanelWidth - 18, 24)
+      .setFontSize(this.compactHud ? 13 : 14);
+    this.barnText
+      .setPosition(28, this.compactHud ? 101 : 78)
+      .setFontSize(this.compactHud ? 15 : 16);
     this.versionText.setPosition(width - 72, 20);
-    this.tutorial.setPosition(width / 2, 42);
-    this.moveHint.setPosition(width / 2, height - 35);
-    this.fullBadge.setPosition(width / 2, Math.min(112, height * 0.25));
+
+    const tutorialCenter = getTutorialCenter(viewport);
+    this.tutorial.setPosition(tutorialCenter.x, tutorialCenter.y);
+    this.moveHint
+      .setPosition(width / 2, height - 35)
+      .setFontSize(this.compactHud ? 14 : 16);
+    this.fullBadge.setPosition(
+      width / 2,
+      this.compactHud ? this.hudPanelHeight + 108 : Math.min(112, height * 0.25),
+    );
 
     this.joystickEnabled = shouldEnableVirtualJoystick(width, navigator.maxTouchPoints);
     this.joystick?.layout();
@@ -215,9 +360,11 @@ export class UIScene extends Phaser.Scene {
     const touchLike = navigator.maxTouchPoints > 0 || width < 900;
     this.moveHint.setText(
       touchLike
-        ? 'Hold the joystick • Tap or drag the farm to move'
-        : 'Hold joystick / WASD / arrows • Click or drag the farm',
+        ? 'Joystick • Tap or drag the farm to move'
+        : 'Joystick / WASD / arrows • Click or drag',
     );
+
+    this.refreshInventoryHud();
     this.cancelPointerGesture();
     this.showPortraitNotice();
   }
@@ -225,7 +372,8 @@ export class UIScene extends Phaser.Scene {
   private showPortraitNotice(): void {
     if (portraitNoticeShown || this.scale.width >= this.scale.height) return;
     portraitNoticeShown = true;
-    const notice = this.add.text(this.scale.width / 2, 102, 'Landscape gives you a wider view', {
+    const noticeY = this.compactHud ? this.hudPanelHeight + 118 : 102;
+    const notice = this.add.text(this.scale.width / 2, noticeY, 'Landscape gives you a wider view', {
       fontFamily: 'system-ui',
       fontSize: '15px',
       color: '#49382e',
