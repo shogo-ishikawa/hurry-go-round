@@ -1,0 +1,10 @@
+:root {
+  color-scheme: dark;
+  font-family: system-ui, sans-serif;
+  background: #17263c;
+}
+
+* { box-sizing: border-box; }
+html, body, #game { width: 100%; height: 100%; margin: 0; overflow: hidden; }
+body { min-height: 100dvh; }
+canvas { display: block; touch-action: none; }
