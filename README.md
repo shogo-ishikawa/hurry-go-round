@@ -1,76 +1,66 @@
 # Hurry-Go-Round
 
-A browser-based gathering, carrying, selling, upgrading, and expansion game. The current v0.1.0 prototype establishes only the responsive game platform and movement controls; the broader gameplay described here is planned.
+A bright browser farm game about keeping a satisfying field-to-barn circuit moving. **v0.2.0 — Visual Harvest Prototype** delivers the first complete loop: automatically harvest wheat, visibly carry it, unload it at the barn, and return while the field regrows.
 
-## Status
+## Current gameplay
 
-Early development. The first prototype contains an original placeholder map and character, keyboard controls, touch/pointer controls, camera tracking, and bounded movement. See [`docs/V0.1.0_SPEC.md`](docs/V0.1.0_SPEC.md) for the exact scope and exclusions.
+Explore a 2000 × 1400 original farm as a female farmer. Approach mature wheat to harvest one bundle every 280 ms, up to a 12-bundle carrying limit. Follow the looping path to the red barn and enter its teal delivery zone to unload automatically. Harvested wheat shows stubble, passes through a growing stage, and returns in roughly eight seconds.
 
-## Requirements and setup
+The farm includes two wheat plots, layered grass and soil, a curved route, barn and loading platform, pond, fences, trees, flowers, crates, a barrel, and in-world guidance. A responsive HUD tracks carried and stored wheat while a short tutorial introduces the loop.
 
-- Node.js 20.19+ or 22.12+
-- npm
+## Setup and commands
+
+Requires Node.js 20.19+ or 22.12+ and npm.
 
 ```bash
-git clone <repository-url>
-cd hurry-go-round
-npm install --no-audit --no-fund
+npm ci --no-audit --no-fund
 npm run dev
 ```
 
-Open the local URL printed by Vite. No backend, accounts, or external services are required.
-
-## Commands
-
 | Command | Purpose |
 | --- | --- |
-| `npm run dev` | Start the Vite development server. |
-| `npm run build` | Type-check and produce a production bundle in `dist/`. |
-| `npm run typecheck` | Run strict TypeScript checking without emitting files. |
-| `npm test` | Run the Vitest unit tests once. |
+| `npm run dev` | Start the responsive Vite development server. |
+| `npm run build` | Type-check and create the production `dist/` bundle. |
+| `npm run typecheck` | Run strict TypeScript checking. |
+| `npm test` | Run deterministic Vitest tests once. |
 | `npm run check` | Run type checking and all tests. |
 
-## Controls
+## Controls and responsive behavior
 
-- **Desktop:** WASD or arrow keys.
-- **Touch/pointer:** Press anywhere on the game and drag in the desired direction. Release to stop. A temporary joystick shows the drag direction.
+- **Desktop:** move with WASD or arrow keys. The initial hint fades after movement begins.
+- **Mobile/tablet:** use the large dedicated joystick in the lower-left corner. There is no action button; harvesting and unloading are automatic.
+- **Portrait:** remains fully playable and shows a one-time, non-modal landscape suggestion.
 
-The player remains inside the map. Diagonal movement is normalized to the same maximum speed as horizontal or vertical movement.
+The camera follows smoothly and recalculates zoom on resize or orientation change. The HUD and joystick remain screen-sized rather than scaling with the world.
 
-## Architecture
+## Project structure
 
 ```text
-src/
-├── main.ts                       Phaser and responsive canvas bootstrap
-├── style.css                     Full-viewport presentation
-└── game/
-    ├── logic/
-    │   ├── movement.ts           Framework-independent movement rules
-    │   └── movement.test.ts      Pure logic unit tests
-    └── scenes/
-        └── PrototypeScene.ts     Map drawing, player, camera, and input
-docs/V0.1.0_SPEC.md               Version scope and acceptance criteria
+src/game/
+├── art/          shared palette, static farm drawing, bounded effects
+├── config/       centralized world and gameplay parameters
+├── entities/     farmer and crop visual entities
+├── input/        lifecycle-safe dedicated virtual joystick
+├── logic/        pure camera, crop, inventory, and movement rules plus tests
+├── scenes/       separated world gameplay and camera-independent UI
+└── state/        single gameplay-state model and event contract
+docs/
+├── ART_DIRECTION.md
+├── V0.1.0_SPEC.md
+└── V0.2.0_SPEC.md
 ```
 
-Phaser owns rendering and input. Pure calculations are kept outside Phaser so they can be tested quickly in Node. All prototype art is drawn at runtime from basic shapes; the project downloads no game assets, fonts, sound, or media.
+Phaser provides rendering, scenes, input, cameras, and tweens. Deterministic rules remain framework-independent and unit tested. All art is original and drawn locally with Phaser vector primitives; no runtime media, remote services, external fonts, or asset CDNs are used.
 
-## Production build and deployment
+## Build and GitHub Pages
 
 ```bash
 npm run check
 npm run build
 ```
 
-Vite writes the deployable static site to `dist/`. The configured base path is `/hurry-go-round/`, matching the repository and its GitHub Pages project URL, `https://<github-owner>.github.io/hurry-go-round/`. Pushes to `main` run the Pages workflow, while pull requests run CI checks and a production build. In repository settings, configure **Pages → Source** to **GitHub Actions**.
+Vite’s base path remains `/hurry-go-round/`, matching `https://<github-owner>.github.io/hurry-go-round/`. Pull requests run CI; pushes to `main` build and deploy `dist/` through GitHub Actions. Configure **Pages → Source** to **GitHub Actions**. Never commit `dist/` or `node_modules/`.
 
-Do not commit `dist/` or `node_modules/`; deployments publish the generated artifact directly from CI.
+## Intentionally deferred
 
-## Planned platform
-
-- Desktop web browsers
-- Mobile web browsers
-- GitHub Pages
-
-## Technology
-
-TypeScript, Phaser, Vite, and Vitest. There is no UI framework.
+Customers, sales, coins, workers, automation, upgrades, land purchases, save data, IndexedDB, PWA installation, service workers, offline mode, audio, accounts, analytics, advertising, external APIs, multiple scenarios, animals, multiplayer, and unlimited scenario content are outside v0.2.0.
