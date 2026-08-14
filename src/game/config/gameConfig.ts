@@ -3,6 +3,7 @@ export const GAME_CONFIG = {
   worldHeight: 1400,
   playerInset: 42,
   playerSpeed: 270,
+  pointMoveArrivalRadius: 10,
   carryCapacity: 12,
   harvestRange: 92,
   harvestIntervalMs: 280,
