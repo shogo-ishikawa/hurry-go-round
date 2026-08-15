@@ -1,0 +1,27 @@
+import type { ResourceAmounts } from "../config/resourceDefinitions";
+import type { ContractState } from "../contracts/contractTypes";
+
+export const SAVE_FORMAT = "hurry-go-round-save" as const;
+export const SAVE_SCHEMA_VERSION = 1 as const;
+export const GAME_VERSION = "0.7.0";
+export interface PersistedSettings { textScale: 1 | 1.15 | 1.3; reducedMotion: boolean; joystickScale: .85 | 1 | 1.15; joystickOpacity: .45 | .65 | .85; contextualHints: boolean }
+export const DEFAULT_SETTINGS: PersistedSettings = { textScale: 1, reducedMotion: false, joystickScale: 1, joystickOpacity: .65, contextualHints: true };
+export interface PersistedCropSnapshot { id: string; resource: "wheat" | "corn"; state: "ready" | "growing" | "harvested"; remainingMs: number }
+export interface PersistedGameSnapshot {
+  player: { x: number; y: number; facing: "front" | "back" | "left" | "right" };
+  cargo: { amounts: ResourceAmounts; capacity: number };
+  storage: { barn: ResourceAmounts; market: ResourceAmounts; marketCapacity: ResourceAmounts };
+  economy: { walletCoins: number; tillCoins: number; soldByResource: ResourceAmounts; soldUnits: number; customersServed: number; customersLeftWithoutPurchase: number; contractCoinsEarned: number };
+  landExpansion: { eastCornFieldUnlocked: boolean; southChickenCoopUnlocked: boolean };
+  livestock: { feed: number; feedCapacity: number; eggs: number; eggCapacity: number; eggRemainingMs: number };
+  upgrades: { harvestSpeedLevel: number; carryCapacityLevel: 0 | 1 | 2 };
+  workers: { harvestWorker: { hired: boolean; carried: number }; transportWorker: { hired: boolean; carried: number }; cornHarvestWorker: { hired: boolean; carried: number }; cornTransportWorker: { hired: boolean; carried: number }; poultryCaretaker: { hired: boolean; resource: "corn" | "egg" | null; carried: number } };
+  automation: { wheatFieldCrate: number; cornFieldCrate: number };
+  crops: PersistedCropSnapshot[];
+  contracts: ContractState;
+  progression: Record<string, boolean>;
+  statistics: { harvestedTotal: number };
+  playTimeMs: number;
+  saveSequence: number;
+}
+export interface SaveEnvelope { format: typeof SAVE_FORMAT; schemaVersion: typeof SAVE_SCHEMA_VERSION; gameVersion: string; saveId: string; createdAt: string; updatedAt: string; checksumAlgorithm: "SHA-256"; checksum: string; payload: PersistedGameSnapshot }

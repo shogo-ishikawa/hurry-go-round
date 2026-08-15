@@ -25,6 +25,11 @@ import { HiringSystem } from "../systems/HiringSystem";
 import { ExpansionSystem } from "../systems/ExpansionSystem";
 import { UIScene } from "./UIScene";
 import { ExpandedAutomationSystem } from "../systems/ExpandedAutomationSystem";
+import { acceptContract, advanceContractActiveTime, cancelActiveContract, completeContract, declineContractOffer, deliverNextContractResourceOne, isContractComplete } from "../logic/contracts";
+import type { ResourceId } from "../config/resourceDefinitions";
+import { palette } from "../art/palette";
+import type { PersistedGameSnapshot } from "../persistence/saveSchema";
+import { createPersistedSnapshot } from "../logic/saveSnapshot";
 export class GameScene extends Phaser.Scene {
   private farmer!: Farmer;
   private crops: CropNode[] = [];
@@ -51,13 +56,20 @@ export class GameScene extends Phaser.Scene {
   private dragDirection: Point = { x: 0, y: 0 };
   private dragging = false;
   private destinationMarker!: Phaser.GameObjects.Arc;
+  private contractCooldown = 0;
+  private contractInRange = false;
+  private contractDirtyElapsed = 0;
+  private contractKey!: Phaser.Input.Keyboard.Key;
   constructor() {
     super("game");
   }
+  init(data: { snapshot?: PersistedGameSnapshot }): void { if(data.snapshot) this.restoreSnapshot(data.snapshot); }
   create(): void {
     createFarmWorld(this);
+    this.createContractFacilities();
     this.createCrops();
     this.farmer = new Farmer(this, 990, 640);
+    const restoredPlayer=(this.registry.get("restored-player") as PersistedGameSnapshot["player"]|undefined);if(restoredPlayer)this.farmer.setPosition(restoredPlayer.x,restoredPlayer.y);
     this.destinationMarker = this.add
       .circle(0, 0, 22, 0xffffff, 0)
       .setStrokeStyle(4, 0x297c78, 0.8)
@@ -71,6 +83,7 @@ export class GameScene extends Phaser.Scene {
       left: "A",
       right: "D",
     }) as typeof this.wasd;
+    this.contractKey = this.input.keyboard.addKey("E");
     this.cameras.main
       .setBounds(0, 0, GAME_CONFIG.worldWidth, GAME_CONFIG.worldHeight)
       .startFollow(this.farmer, true, 0.2, 0.2);
@@ -117,8 +130,11 @@ export class GameScene extends Phaser.Scene {
     this.input.on("pointerup", this.endPointer, this);
     this.scale.on(Phaser.Scale.Events.RESIZE, this.handleResize, this);
     this.game.events.on(Phaser.Core.Events.BLUR, this.clearInput, this);
+    this.game.events.on(GAME_EVENTS.contractAction, this.handleContractAction, this);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, this.cleanup, this);
   }
+  getPersistedSnapshot(sequence:number):PersistedGameSnapshot{return createPersistedSnapshot(this.state,{player:{x:this.farmer.x,y:this.farmer.y,facing:"front"},crops:this.crops.map((c,i)=>({id:`wheat-${String(i).padStart(3,"0")}`,resource:"wheat",state:c.model.state,remainingMs:Math.max(0,c.model.regrowMs-c.model.elapsedMs)})),playTimeMs:this.time.now,saveSequence:sequence});}
+  private restoreSnapshot(s:PersistedGameSnapshot):void{const fresh=createGameState();this.state={...fresh,cargo:{amounts:{...s.cargo.amounts},capacity:s.cargo.capacity},barn:{...s.storage.barn},market:{...s.storage.market},marketCapacity:{...s.storage.marketCapacity},soldByResource:{...s.economy.soldByResource},landExpansion:{...s.landExpansion},livestock:{feed:s.livestock.feed,feedCapacity:s.livestock.feedCapacity,eggs:s.livestock.eggs,eggCapacity:s.livestock.eggCapacity},economy:{...fresh.economy,walletCoins:s.economy.walletCoins,tillCoins:s.economy.tillCoins,soldUnits:s.economy.soldUnits,customersServed:s.economy.customersServed,customersLeftWithoutPurchase:s.economy.customersLeftWithoutPurchase,contractCoinsEarned:s.economy.contractCoinsEarned},upgrades:{...s.upgrades},workers:{harvestWorker:{...fresh.workers.harvestWorker,...s.workers.harvestWorker},transportWorker:{...fresh.workers.transportWorker,...s.workers.transportWorker},cornHarvestWorker:{...fresh.workers.cornHarvestWorker,...s.workers.cornHarvestWorker},cornTransportWorker:{...fresh.workers.cornTransportWorker,...s.workers.cornTransportWorker},poultryCaretaker:{...fresh.workers.poultryCaretaker,...s.workers.poultryCaretaker}},automation:{...fresh.automation,cornFieldCrate:s.automation.cornFieldCrate},inventory:{...fresh.inventory,fieldCrate:s.automation.wheatFieldCrate},contracts:structuredClone(s.contracts),harvestedTotal:s.statistics.harvestedTotal,...s.progression};this.registry.set("restored-player",s.player);}
   update(time: number, delta: number): void {
     const direction = this.readDirection();
     const moving = direction.x !== 0 || direction.y !== 0;
@@ -151,7 +167,26 @@ export class GameScene extends Phaser.Scene {
     this.workers.update(delta);
     this.expansion.update(delta);
     this.expandedAutomation.update(delta);
+    this.updateContracts(delta);
   }
+  private createContractFacilities(): void {
+    const board = this.add.graphics().setDepth(GAME_CONFIG.contractBoard.y);
+    board.fillStyle(palette.shadow,.22).fillEllipse(1638,970,180,38).lineStyle(7,palette.outline).fillStyle(palette.soil).fillRoundedRect(1550,850,160,105,8).strokeRoundedRect(1550,850,160,105,8).fillStyle(palette.barn).fillTriangle(1535,855,1725,855,1630,815).fillStyle(palette.cream).fillRoundedRect(1570,870,42,55,3).fillRoundedRect(1620,865,42,62,3).fillRoundedRect(1670,875,25,47,3);
+    this.add.text(1630,835,"出荷契約",{fontFamily:"system-ui",fontSize:"20px",fontStyle:"bold",color:"#fff4d8"}).setOrigin(.5).setDepth(2000);
+    const dock = this.add.graphics().setDepth(GAME_CONFIG.contractDock.y); dock.fillStyle(palette.shadow,.2).fillEllipse(1378,890,230,55).lineStyle(6,palette.outline).fillStyle(palette.path).fillRoundedRect(1260,780,230,105,10).strokeRoundedRect(1260,780,230,105,10).fillStyle(palette.soil).fillRoundedRect(1290,800,48,45,6).strokeRoundedRect(1290,800,48,45,6).fillRoundedRect(1350,800,48,45,6).strokeRoundedRect(1350,800,48,45,6).fillRoundedRect(1410,800,48,45,6).strokeRoundedRect(1410,800,48,45,6);
+    this.add.text(1375,862,"契約出荷場",{fontFamily:"system-ui",fontSize:"17px",fontStyle:"bold",color:"#49382e",backgroundColor:"#fff4d8dd",padding:{x:8,y:4}}).setOrigin(.5).setDepth(2000);
+  }
+  private unlockedResources(): ResourceId[] { return this.state.landExpansion.southChickenCoopUnlocked ? ["wheat","corn","egg"] : this.state.landExpansion.eastCornFieldUnlocked ? ["wheat","corn"] : ["wheat"]; }
+  private updateContracts(delta: number): void {
+    this.state = { ...this.state, contracts: advanceContractActiveTime(this.state.contracts, delta, false) }; this.contractCooldown = Math.max(0, this.contractCooldown-delta);
+    if(this.state.contracts.active){this.contractDirtyElapsed+=delta;if(this.contractDirtyElapsed>=1000){this.contractDirtyElapsed=0;this.game.events.emit(GAME_EVENTS.dirty);}}
+    const range = Phaser.Math.Distance.Between(this.farmer.x,this.farmer.y,GAME_CONFIG.contractBoard.x,GAME_CONFIG.contractBoard.y)<=GAME_CONFIG.contractBoard.radius;
+    if (range !== this.contractInRange) { this.contractInRange=range; this.game.events.emit(GAME_EVENTS.contractRange,range); }
+    if (range && (Phaser.Input.Keyboard.JustDown(this.contractKey) || Phaser.Input.Keyboard.JustDown(this.cursors.space!))) this.game.events.emit(GAME_EVENTS.contractOpen);
+    const dock = Phaser.Math.Distance.Between(this.farmer.x,this.farmer.y,GAME_CONFIG.contractDock.x,GAME_CONFIG.contractDock.y)<=GAME_CONFIG.contractDock.radius;
+    if (dock && this.contractCooldown<=0 && this.state.contracts.active) { const result=deliverNextContractResourceOne(this.state.contracts,this.state.barn); if(result.changed){ this.state={...this.state,contracts:result.state,barn:result.barn}; this.contractCooldown=GAME_CONFIG.contractDeliveryIntervalMs; transferEffect(this,this.farmer.x,this.farmer.y,GAME_CONFIG.contractDock.x,GAME_CONFIG.contractDock.y); this.emitState(); this.game.events.emit(GAME_EVENTS.dirty); if(this.state.contracts.active&&isContractComplete(this.state.contracts.active)){const done=completeContract(this.state.contracts,this.state.economy.walletCoins);if(done.ok){this.state={...this.state,contracts:done.state,economy:{...this.state.economy,walletCoins:done.wallet,contractCoinsEarned:(this.state.economy.contractCoinsEarned??0)+done.reward.total}};this.emitState();this.game.events.emit(GAME_EVENTS.dirty,"priority");this.game.events.emit(GAME_EVENTS.contractOpen,done.reward);}} } }
+  }
+  private handleContractAction(action: string, id?: string): void { let contracts=this.state.contracts; if(action==="accept"&&id){const r=acceptContract(contracts,id,this.unlockedResources());if(r.ok)contracts=r.state;} else if(action==="decline"&&id){const r=declineContractOffer(contracts,id,this.unlockedResources());if(r.ok)contracts=r.state;} else if(action==="cancel"){const r=cancelActiveContract(contracts,this.state.barn);if(r.ok){contracts=r.state;this.state={...this.state,barn:r.barn};}} this.state={...this.state,contracts};this.emitState();this.game.events.emit(GAME_EVENTS.dirty,"priority"); }
   private createCrops(): void {
     const positions: Array<[number, number]> = [];
     for (const [startX, startY] of [
@@ -324,6 +359,7 @@ export class GameScene extends Phaser.Scene {
   }
   private emitState(): void {
     this.game.events.emit(GAME_EVENTS.state, this.state);
+    this.game.events.emit(GAME_EVENTS.dirty);
   }
   private setTutorial(stage: number): void {
     if (stage > this.tutorialStage) {
@@ -351,5 +387,6 @@ export class GameScene extends Phaser.Scene {
     this.input.off("pointerup", this.endPointer, this);
     this.scale.off(Phaser.Scale.Events.RESIZE, this.handleResize, this);
     this.game.events.off(Phaser.Core.Events.BLUR, this.clearInput, this);
+    this.game.events.off(GAME_EVENTS.contractAction, this.handleContractAction, this);
   }
 }

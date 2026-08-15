@@ -83,4 +83,7 @@ export const GAME_CONFIG = {
   cornHarvestWorkerHarvestDurationMs: 1050,
   cornTransportWorkerUnloadIntervalMs: 150,
   poultryCaretakerUnloadIntervalMs: 160,
+  contractBoard: { x: 1630, y: 940, radius: 125 },
+  contractDock: { x: 1370, y: 830, radius: 115 },
+  contractDeliveryIntervalMs: 180,
 } as const;

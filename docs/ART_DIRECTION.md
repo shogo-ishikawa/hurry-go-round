@@ -49,3 +49,8 @@ The harvest worker uses olive headwear and warm work clothes; the transport work
 ## v0.6.0 mixed cargo and operations
 
 The farmer basket composes wheat, corn, and egg clusters at the same time, caps each cluster visually, and uses a red securing strap at full shared capacity. Facility signs use coordinated anchors and distance LOD. Coop fixtures use a long corn-visible trough on the left and a roofed straw egg rack on the right; worker tools, carts, crop ears, chicken posture, wood joints, road ruts, and upper-left highlights retain the shared warm-outline treatment.
+
+
+## v0.7.0 persistence and contracts
+
+The contract board uses roofed warm timber, pinned cream papers, and a restrained cooperative seal. The nearby shipping dock is a raised outlined platform with three bounded crate groups rather than unit-for-unit clutter. Title, pause, recovery, settings, and contract surfaces retain cream panels, warm outlines, teal actions, soft shadows, readable Japanese hierarchy, and static reduced-motion alternatives.
