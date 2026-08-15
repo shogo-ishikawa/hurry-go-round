@@ -5,6 +5,10 @@ export const UI_TEXT = {
     wheat: "麦",
     corn: "とうもろこし",
     egg: "たまご",
+    flour: "小麦粉",
+    cornmeal: "コーンミール",
+    bread: "パン",
+    cornbread: "コーンブレッド",
   } satisfies Record<ResourceId, string>,
   facilities: {
     delivery: "納品",

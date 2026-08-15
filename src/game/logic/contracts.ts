@@ -4,7 +4,7 @@ import type { ContractState, ContractType, DeliveryContract } from "../contracts
 export interface ContractGenerationInput { seed: number; nextSequence: number; count: number; unlockedResources: readonly ResourceId[]; reputationLevel: number }
 const RESOURCE_KEYS = RESOURCE_IDS;
 export const CONTRACT_OFFER_COUNT = 3;
-const prices: ResourceAmounts = { wheat: 2, corn: 3, egg: 5 };
+const prices: ResourceAmounts = { wheat:2,corn:3,egg:5,flour:6,cornmeal:8,bread:16,cornbread:26 };
 const typeMultipliers: Record<ContractType, number> = { single: 1.35, mixed: 1.5, priority: 1.45 };
 const bonusRates: Record<ContractType, number> = { single: .15, mixed: .2, priority: .3 };
 const reputationMultipliers = [1, 1.05, 1.1, 1.15] as const;
@@ -12,6 +12,8 @@ const ranges: Record<ResourceId, Record<"single" | "mixed" | "priority", readonl
   wheat: { single: [18, 42], mixed: [10, 28], priority: [10, 22] },
   corn: { single: [14, 34], mixed: [8, 24], priority: [8, 18] },
   egg: { single: [6, 18], mixed: [4, 12], priority: [4, 10] },
+  flour:{single:[5,14],mixed:[3,9],priority:[3,8]}, cornmeal:{single:[5,12],mixed:[3,8],priority:[3,7]},
+  bread:{single:[3,10],mixed:[2,7],priority:[2,6]}, cornbread:{single:[2,8],mixed:[2,5],priority:[2,4]},
 };
 
 function random(seed: number): [number, number] {
@@ -75,8 +77,8 @@ export function declineContractOffer(state: ContractState, id: string, unlocked:
   return { ok: true, state: { ...base, ...replacement(base, unlocked) } };
 }
 export function deliverNextContractResourceOne(state: ContractState, barn: ResourceAmounts): { state: ContractState; barn: ResourceAmounts; resource: ResourceId | null; changed: boolean } {
-  if (!state.active) return { state, barn, resource: null, changed: false }; const start = state.deliveryCursor ? (RESOURCE_KEYS.indexOf(state.deliveryCursor) + 1) % 3 : 0;
-  for (let i = 0; i < 3; i++) { const key = RESOURCE_KEYS[(start + i) % 3]!; if (state.active.delivered[key] < state.active.requirements[key] && barn[key] > 0) { const active = { ...state.active, delivered: { ...state.active.delivered, [key]: state.active.delivered[key] + 1 } }; return { state: { ...state, active, deliveryCursor: key }, barn: { ...barn, [key]: barn[key] - 1 }, resource: key, changed: true }; } }
+  if (!state.active) return { state, barn, resource: null, changed: false }; const start = state.deliveryCursor ? (RESOURCE_KEYS.indexOf(state.deliveryCursor) + 1) % RESOURCE_KEYS.length : 0;
+  for (let i = 0; i < RESOURCE_KEYS.length; i++) { const key = RESOURCE_KEYS[(start + i) % RESOURCE_KEYS.length]!; if (state.active.delivered[key] < state.active.requirements[key] && barn[key] > 0) { const active = { ...state.active, delivered: { ...state.active.delivered, [key]: state.active.delivered[key] + 1 } }; return { state: { ...state, active, deliveryCursor: key }, barn: { ...barn, [key]: barn[key] - 1 }, resource: key, changed: true }; } }
   return { state, barn, resource: null, changed: false };
 }
 export function isContractComplete(contract: DeliveryContract): boolean { return RESOURCE_KEYS.every(k => contract.delivered[k] >= contract.requirements[k]); }
