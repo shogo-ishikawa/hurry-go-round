@@ -32,7 +32,9 @@ export function getCornFieldCrateCapacity(level: number | undefined): number {
 
 export function getCornFieldExpansionCost(level: number | undefined): number | null {
   const normalized = normalizeCornFieldLevel(level);
-  return normalized >= 2 ? null : EXPANSION_COSTS[normalized];
+  if (normalized === 0) return EXPANSION_COSTS[0];
+  if (normalized === 1) return EXPANSION_COSTS[1];
+  return null;
 }
 
 export function getCornFieldHarvestIntervalMultiplier(level: number | undefined): number {
