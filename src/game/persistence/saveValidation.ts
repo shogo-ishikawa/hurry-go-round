@@ -14,8 +14,11 @@ export type ValidationResult<T> =
 const object = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
-const finiteNonNegative = (value: unknown): value is number =>
+export const finiteNonNegativeInteger = (value: unknown): value is number =>
   typeof value === "number" && Number.isFinite(value) && value >= 0 && Number.isInteger(value);
+
+export const finiteNonNegativeNumber = (value: unknown): value is number => typeof value === "number" && Number.isFinite(value) && value >= 0;
+const finiteNonNegative=finiteNonNegativeInteger;
 
 const validAmounts=(set:unknown):boolean=>object(set)&&Object.keys(set).length===RESOURCE_IDS.length&&Object.keys(set).every(key=>RESOURCE_IDS.includes(key as (typeof RESOURCE_IDS)[number]))&&RESOURCE_IDS.every(key=>finiteNonNegative(set[key]));
 
@@ -82,11 +85,12 @@ export function validateSnapshot(
     snapshot.economy?.soldUnits,
     snapshot.economy?.customersServed,
     snapshot.economy?.customersLeftWithoutPurchase,
-    snapshot.playTimeMs,
     snapshot.saveSequence,
   ]) {
     if (!finiteNonNegative(numberValue)) errors.push("invalid non-negative number");
   }
+
+  if(!finiteNonNegativeNumber(snapshot.playTimeMs)) errors.push("invalid play time");
 
   if (
     !Array.isArray(snapshot.crops) ||
@@ -151,6 +155,10 @@ export function validateSnapshot(
     const intake=network.processingIntake;if(!validAmounts(intake.amounts)||!finiteNonNegative(intake.capacity)||RESOURCE_IDS.reduce((n,r)=>n+intake.amounts[r],0)>intake.capacity||intake.amounts.bread!==0||intake.amounts.cornbread!==0||!finiteNonNegative(intake.roundRobinIndex))errors.push("invalid processing intake");
     const courier=network.courier,capacities=[0,10,14,18];if(typeof courier.hired!=="boolean"||![0,1,2,3].includes(courier.level)||courier.hired!==(courier.level>0)||courier.capacity!==capacities[courier.level]||!validAmounts(courier.carried)||RESOURCE_IDS.reduce((n,r)=>n+courier.carried[r],0)>courier.capacity||!["not-hired","idle-at-hub","select-source","moving-to-source","loading","waiting-for-batch","select-destination","moving-to-processing","moving-to-barn","unloading-processing","unloading-barn","returning-to-hub"].includes(courier.stage)||!(courier.sourceId===null||["wheat","corn","egg"].includes(courier.sourceId))||!(courier.destinationId===null||["processing-intake","barn"].includes(courier.destinationId))||!finiteNonNegative(courier.waitMs)||!finiteNonNegative(courier.sourceRoundRobinIndex))errors.push("invalid collection courier");
   }
+
+  const dairy=snapshot.dairy;
+  if(!object(dairy)||typeof dairy.pastureUnlocked!=="boolean"||![0,1,2].includes(dairy.pastureLevel)||typeof dairy.barnBuilt!=="boolean"||!Array.isArray(dairy.cows)||dairy.cows.length>3||!finiteNonNegative(dairy.hayRack)||dairy.hayRack>24||!finiteNonNegative(dairy.milkTank)||dairy.milkTank>24||typeof dairy.workshopBuilt!=="boolean"||![0,1,2,3].includes(dairy.workshopLevel)||!finiteNonNegative(dairy.workshopInput)||!object(dairy.workshopOutput)||!finiteNonNegative(dairy.workshopOutput.butter)||!finiteNonNegative(dairy.workshopOutput.cheese)||!finiteNonNegative(dairy.protectedMilk)) errors.push("invalid dairy state");
+  else for(const cow of dairy.cows)if(!object(cow)||typeof cow.id!=="string"||typeof cow.producing!=="boolean"||!finiteNonNegativeNumber(cow.productionRemainingMs)||!finiteNonNegative(cow.readyMilk)||!finiteNonNegative(cow.activitySeed)) errors.push("invalid cow state");
 
   if (
     !object(snapshot.operations) ||

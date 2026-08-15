@@ -4,7 +4,7 @@ import type { ContractState, ContractType, DeliveryContract } from "../contracts
 export interface ContractGenerationInput { seed: number; nextSequence: number; count: number; unlockedResources: readonly ResourceId[]; reputationLevel: number }
 const RESOURCE_KEYS = RESOURCE_IDS;
 export const CONTRACT_OFFER_COUNT = 3;
-const prices: ResourceAmounts = { wheat:2,corn:3,egg:5,flour:6,cornmeal:8,bread:16,cornbread:26 };
+const prices: ResourceAmounts = { wheat:2,corn:3,egg:5,flour:6,cornmeal:8,bread:16,cornbread:26,hay:0,milk:8,butter:20,cheese:32 };
 const typeMultipliers: Record<ContractType, number> = { single: 1.35, mixed: 1.5, priority: 1.45 };
 const bonusRates: Record<ContractType, number> = { single: .15, mixed: .2, priority: .3 };
 const reputationMultipliers = [1, 1.05, 1.1, 1.15] as const;
@@ -14,6 +14,7 @@ const ranges: Record<ResourceId, Record<"single" | "mixed" | "priority", readonl
   egg: { single: [6, 18], mixed: [4, 12], priority: [4, 10] },
   flour:{single:[5,14],mixed:[3,9],priority:[3,8]}, cornmeal:{single:[5,12],mixed:[3,8],priority:[3,7]},
   bread:{single:[3,10],mixed:[2,7],priority:[2,6]}, cornbread:{single:[2,8],mixed:[2,5],priority:[2,4]},
+  hay:{single:[1,1],mixed:[1,1],priority:[1,1]}, milk:{single:[4,8],mixed:[2,5],priority:[8,12]}, butter:{single:[2,5],mixed:[1,3],priority:[5,8]}, cheese:{single:[2,4],mixed:[1,3],priority:[4,7]},
 };
 
 function random(seed: number): [number, number] {
