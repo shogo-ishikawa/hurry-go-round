@@ -11,19 +11,21 @@ import { purchaseLandExpansion, type LandExpansionId } from "../logic/landExpans
 import { collectEggOne, depositCornFeedOne, produceEggOne } from "../logic/livestock";
 import { GAME_EVENTS, type GameState } from "../state/GameState";
 import { palette } from "../art/palette";
+import { FACILITIES, PRODUCTION_SIGNS } from "../logic/facilities";
+import { layoutWorldSigns } from "../logic/signLayout";
 
 export class ExpansionSystem {
   private readonly corn: CornNode[] = []; private readonly chickens: Chicken[] = [];
   private harvestTimer = 0; private feedTimer = 0; private eggPickupTimer = 0; private eggProductionTimer = GAME_CONFIG.eggProductionIntervalMs;
   private purchaseTimer = 0; private purchaseId: LandExpansionId | null = null; private carryTimer = 0; private carryArmed = true; private hintId = "";
-  private eastGate: Phaser.GameObjects.Container; private southGate: Phaser.GameObjects.Container; private eastSign: WorldSign; private southSign: WorldSign; private carrySign: WorldSign;
+  private eastGate: Phaser.GameObjects.Container; private southGate: Phaser.GameObjects.Container; private eastSign: WorldSign; private southSign: WorldSign; private farmManagementSign: WorldSign;
   constructor(private scene: Phaser.Scene, private farmer: Farmer, private getState: () => GameState, private setState: (s: GameState) => void) {
     for (let row = 0; row < 4; row++) for (let col = 0; col < 6; col++) this.corn.push(new CornNode(scene, 2300 + col * 88, 340 + row * 125, GAME_CONFIG.cornRegrowBaseMs + (row * 6 + col) * GAME_CONFIG.cornRegrowStaggerMs));
     const colors = [palette.cream, 0xd9b784, 0xa96d43]; for (let i = 0; i < 3; i++) this.chickens.push(new Chicken(scene, 1090 + i * 90, 1640, colors[i] ?? palette.cream, i));
     this.eastGate = this.makeGate(2100, 650); this.southGate = this.makeGate(1150, 1420);
     this.eastSign = new WorldSign(scene, 1990, 560, [UI_TEXT.facilities.east, "120コイン"]);
     this.southSign = new WorldSign(scene, 1040, 1390, [UI_TEXT.facilities.coop, "240コイン"]);
-    this.carrySign = new WorldSign(scene, 1260, 610, [UI_TEXT.facilities.carry, "12 → 18　60コイン"]);
+    const obstacles=FACILITIES.filter(f=>!["wheat-worker-board","corn-worker-board","poultry-worker-board","operations-office"].includes(f.id)).map(f=>f.worldBounds);const placements=layoutWorldSigns(PRODUCTION_SIGNS,obstacles,GAME_CONFIG.signMinimumGap);const placement=(id:string,fallback:{x:number;y:number})=>{const p=placements.find(item=>item.id===id);return p?{x:p.x+p.width/2,y:p.y+p.height/2}:fallback;};const farm=placement("farm-management",{x:1600,y:1220});this.farmManagementSign=new WorldSign(scene,farm.x,farm.y,["農場管理","強化・スタッフ"]);const operations=placement("operations-office",{x:1010,y:1070});new WorldSign(scene,operations.x,operations.y,["農場運営所","スタッフ・施設"]);const east=placement("east-management",{x:2500,y:980});new WorldSign(scene,east.x,east.y,["東農地管理","とうもろこし自動化"]);const poultry=placement("poultry-management",{x:1710,y:1450});new WorldSign(scene,poultry.x,poultry.y,["鶏小屋管理","餌・卵・スタッフ"]);
     new WorldSign(scene, 930, 1540, [UI_TEXT.facilities.feed]); new WorldSign(scene, 1410, 1540, [UI_TEXT.facilities.eggs]);
     this.syncVisibility();
   }
@@ -57,7 +59,7 @@ export class ExpansionSystem {
   private updateCarryUpgrade(delta: number): void { const near = this.near(GAME_CONFIG.carryUpgrade); if (!near) { this.carryTimer = 0; this.carryArmed = true; return; } if (!this.carryArmed) return; this.carryTimer += delta; if (this.carryTimer < GAME_CONFIG.carryUpgradeHoldDurationMs) return; const state = this.getState(); const r = purchaseCarryUpgrade(state.economy.walletCoins, state.upgrades.carryCapacityLevel); this.carryTimer = 0; this.carryArmed = false; if (!r.purchased) { this.emitHint(`carry-${r.reason}`, r.reason === "maximum" ? "背負い籠は最大容量です" : UI_TEXT.messages.insufficientCoins); return; }
     const capacity = getCarryCapacityForLevel(r.level); this.setState({ ...state, economy: { ...state.economy, walletCoins: r.walletCoins }, upgrades: { ...state.upgrades, carryCapacityLevel: r.level }, cargo: { ...state.cargo, capacity } }); this.updateCarrySign(r.level);
   }
-  private updateCarrySign(level: 0 | 1 | 2): void { const cost = getCarryUpgradeCost(level); this.carrySign.setLines(cost === null ? [UI_TEXT.facilities.carry, "最大容量　24個"] : [UI_TEXT.facilities.carry, `${getCarryCapacityForLevel(level)} → ${getCarryCapacityForLevel((level + 1) as 1 | 2)}　${cost}コイン`]); }
+  private updateCarrySign(level: 0 | 1 | 2): void { const cost = getCarryUpgradeCost(level); this.farmManagementSign.setLines(cost === null ? ["農場管理", "背負い籠　最大容量 24個"] : ["農場管理", `背負い籠 ${getCarryCapacityForLevel(level)} → ${getCarryCapacityForLevel((level + 1) as 1 | 2)}　${cost}コイン`]); }
   private updateHint(): void { const state = this.getState(); if (!state.landExpansion.eastCornFieldUnlocked && this.mid(GAME_CONFIG.eastPurchase)) this.emitHint("east", UI_TEXT.messages.purchaseHint); else if (!state.landExpansion.southChickenCoopUnlocked && this.mid(GAME_CONFIG.southPurchase)) this.emitHint("south", state.landExpansion.eastCornFieldUnlocked ? UI_TEXT.messages.purchaseHint : UI_TEXT.messages.eastRequired); else if (state.landExpansion.southChickenCoopUnlocked && this.mid(GAME_CONFIG.feedTrough) && state.livestock.feed === 0) this.emitHint("feed", UI_TEXT.messages.feedEmpty); else this.hintId = ""; }
   private emitHint(id: string, text: string): void { if (id === this.hintId) return; this.hintId = id; this.scene.game.events.emit(GAME_EVENTS.hint, text); }
   private near(p: { x: number; y: number; radius: number }): boolean { return Phaser.Math.Distance.Between(this.farmer.x, this.farmer.y, p.x, p.y) <= p.radius; }

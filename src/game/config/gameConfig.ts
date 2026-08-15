@@ -76,7 +76,7 @@ export const GAME_CONFIG = {
   cornHarvestWorkerHireCost: 160,
   cornTransportWorkerHireCost: 240,
   poultryCaretakerHireCost: 300,
-  signMinimumGap: 24,
+  signMinimumGap: 40,
   signFullDetailDistance: 400,
   signCompactDistance: 850,
   notificationCooldownMs: 2500,

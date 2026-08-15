@@ -4,7 +4,7 @@ export type SignAnchor = "north" | "north-east" | "east" | "south-east" | "south
 export interface SignPlacement extends Rect { id: string; mode: "full" | "icon" }
 const directions: Record<SignAnchor, readonly [number, number]> = { north:[0,-1], "north-east":[1,-1], east:[1,0], "south-east":[1,1], south:[0,1], "south-west":[-1,1], west:[-1,0], "north-west":[-1,-1] };
 const expandedOverlap = (a: Rect, b: Rect, gap: number) => a.x < b.x + b.width + gap && a.x + a.width + gap > b.x && a.y < b.y + b.height + gap && a.y + a.height + gap > b.y;
-export function layoutWorldSigns(definitions: readonly SignDefinition[], obstacles: readonly Rect[], gap = 24, offset = 110): SignPlacement[] {
+export function layoutWorldSigns(definitions: readonly SignDefinition[], obstacles: readonly Rect[], gap = 40, offset = 110): SignPlacement[] {
   const placed: SignPlacement[] = [];
   for (const sign of [...definitions].sort((a,b) => b.priority-a.priority || a.id.localeCompare(b.id))) {
     let accepted: SignPlacement | undefined;
@@ -17,5 +17,7 @@ export function layoutWorldSigns(definitions: readonly SignDefinition[], obstacl
   }
   return placed;
 }
+export function projectSignRect(rect:Rect,zoom:number,camera={x:0,y:0}):Rect{return{x:(rect.x-camera.x)*zoom,y:(rect.y-camera.y)*zoom,width:rect.width*zoom,height:rect.height*zoom};}
+export function validateNoSignOverlap(signs:readonly Rect[],gap=40):boolean{return signs.every((sign,index)=>signs.slice(index+1).every(other=>!expandedOverlap(sign,other,gap)));}
 export type SignLod = "hidden" | "compact" | "detail" | "operation";
 export const getSignLod = (distance: number, insideOperationRange = false): SignLod => insideOperationRange ? "operation" : distance > 850 ? "hidden" : distance >= 400 ? "compact" : "detail";

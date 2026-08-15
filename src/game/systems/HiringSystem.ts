@@ -7,7 +7,7 @@ import {
   type WorkerKind,
 } from "../logic/hiring";
 import type { Farmer } from "../entities/Farmer";
-import type { GameState } from "../state/GameState";
+import { GAME_EVENTS, type GameState } from "../state/GameState";
 export class HiringSystem {
   private stations: Record<WorkerKind, HiringStation>;
   private progress: Record<WorkerKind, number> = { harvest: 0, transport: 0 };
@@ -16,7 +16,7 @@ export class HiringSystem {
     transport: false,
   };
   constructor(
-    scene: Phaser.Scene,
+    private scene: Phaser.Scene,
     private farmer: Farmer,
     private getState: () => GameState,
     private setState: (s: GameState) => void,
@@ -102,11 +102,13 @@ export class HiringSystem {
         harvestWorker: {
           ...s.workers.harvestWorker,
           hired: r.state.harvestHired,
+          level: r.state.harvestHired ? 1 : 0,
           status: r.state.harvestHired ? "麦畑へ移動中" : "未雇用",
         },
         transportWorker: {
           ...s.workers.transportWorker,
           hired: r.state.transportHired,
+          level: r.state.transportHired ? 1 : 0,
           status: r.state.transportHired ? "集荷箱へ戻っています" : "未雇用",
         },
       },
@@ -114,6 +116,7 @@ export class HiringSystem {
       firstTransportWorkerHired: r.state.transportHired,
     });
     this.progress[kind] = 0;
+    this.scene.game.events.emit(GAME_EVENTS.dirty,"priority");
     station.pulse();
     this.tutorial(kind === "harvest" ? 10 : 13);
   }

@@ -28,11 +28,11 @@ export interface GameState {
   economy: Economy;
   upgrades: { harvestSpeedLevel: number; carryCapacityLevel: CarryCapacityLevel };
   workers: {
-    harvestWorker: { hired: boolean; carried: number; status: string };
-    transportWorker: { hired: boolean; carried: number; status: string };
-    cornHarvestWorker: { hired: boolean; carried: number; status: string };
-    cornTransportWorker: { hired: boolean; carried: number; status: string };
-    poultryCaretaker: { hired: boolean; resource: "corn" | "egg" | null; carried: number; status: string };
+    harvestWorker: { hired: boolean; level: 0|1|2|3; carried: number; status: string };
+    transportWorker: { hired: boolean; level: 0|1|2|3; carried: number; status: string };
+    cornHarvestWorker: { hired: boolean; level: 0|1|2|3; carried: number; status: string };
+    cornTransportWorker: { hired: boolean; level: 0|1|2|3; carried: number; status: string };
+    poultryCaretaker: { hired: boolean; level: 0|1|2|3; resource: "corn" | "egg" | null; carried: number; status: string };
   };
   automation: { cornFieldCrate: number; cornFieldCrateCapacity: number };
   contracts: ContractState;
@@ -75,11 +75,11 @@ export function createGameState(): GameState {
     },
     upgrades: { harvestSpeedLevel: 0, carryCapacityLevel: 0 },
     workers: {
-      harvestWorker: { hired: false, carried: 0, status: "未雇用" },
-      transportWorker: { hired: false, carried: 0, status: "未雇用" },
-      cornHarvestWorker: { hired: false, carried: 0, status: "未雇用" },
-      cornTransportWorker: { hired: false, carried: 0, status: "未雇用" },
-      poultryCaretaker: { hired: false, resource: null, carried: 0, status: "未雇用" },
+      harvestWorker: { hired: false, level:0, carried: 0, status: "未雇用" },
+      transportWorker: { hired: false, level:0, carried: 0, status: "未雇用" },
+      cornHarvestWorker: { hired: false, level:0, carried: 0, status: "未雇用" },
+      cornTransportWorker: { hired: false, level:0, carried: 0, status: "未雇用" },
+      poultryCaretaker: { hired: false, level:0, resource: null, carried: 0, status: "未雇用" },
     },
     automation: { cornFieldCrate: 0, cornFieldCrateCapacity: GAME_CONFIG.cornFieldCrateCapacity },
     contracts: createContractState(),
@@ -103,5 +103,8 @@ export const GAME_EVENTS = {
   contractRange: "contract-range",
   contractOpen: "contract-open",
   contractAction: "contract-action",
+  operationsRange: "operations-range",
+  operationsOpen: "operations-open",
+  operationsAction: "operations-action",
   dirty: "persistent-state-dirty",
 } as const;
