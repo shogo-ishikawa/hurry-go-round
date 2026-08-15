@@ -14,7 +14,7 @@ export const UI_TEXT = {
     delivery: "納品",
     market: "売り場",
     cash: "売上回収",
-    carry: "背負い籠",
+    carry: "運搬かご",
     east: "東の畑",
     cornFieldExpansion: "とうもろこし畑拡張",
     coop: "鶏小屋",
@@ -24,11 +24,12 @@ export const UI_TEXT = {
     transportWorker: "麦の運搬スタッフ",
     crate: "麦の集荷箱",
   },
+  terminology: { inventory:"持ち物", carryingBasket:"運搬かご", carryingCapacity:"持てる数", trainingLodge:"研修小屋", collectionHub:"集配所", collectionBox:"集配ボックス", collectionCourier:"集配スタッフ" },
   messages: {
     insufficientCoins: "コインが足りません",
-    full: "背負い籠が満杯です",
+    full: "持ち物がいっぱいです",
     mixed:
-      "背負い籠には別の商品が入っています\n先に倉庫へ納品してください",
+      "持ち物には別の商品が入っています\n先に倉庫へ納品してください",
     feedEmpty: "とうもろこしを餌箱へ入れましょう",
     eggsFull: "卵置き場が満杯です",
     landLocked: "この土地はまだ購入されていません",

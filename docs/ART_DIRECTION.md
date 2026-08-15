@@ -58,3 +58,7 @@ The contract board uses roofed warm timber, pinned cream papers, and a restraine
 ## v0.8.0 operations and workforce
 
 The shared farm, east-field, poultry, and operations boards use the existing warm timber and cream-panel language. Hire pads combine a full-size outlined range with role text and equipment cues. Corn harvesters use field-green workwear and a hand tool, corn transporters use a broad yellow cart silhouette, and caretakers use a blue apron with a feed/egg carrier; role readability does not depend on color alone. Detailed costs, prerequisites, progress, and levels belong to contextual or camera-fixed panels rather than additional large world signs.
+
+## v0.9.1 training and collection
+
+The west training lodge is a distinct timber building with a gabled roof, entrance board, tools, and side path. Collection boxes use a roof, downward cargo mark, resource icon, and collection flag; the collection hub uses a sorting shelf and compact cargo cart. Couriers wear a delivery cap and vest and carry a visibly filled box, so their role and load do not depend on color alone.

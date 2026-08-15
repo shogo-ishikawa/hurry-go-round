@@ -144,6 +144,14 @@ export function validateSnapshot(
     if(!object(processing.rawReserves)||![processing.rawReserves.wheat,processing.rawReserves.corn,processing.rawReserves.egg].every(finiteNonNegative)||!object(processing.autoSelectionRoundRobin)||![processing.autoSelectionRoundRobin.mill,processing.autoSelectionRoundRobin.bakery].every(finiteNonNegative))errors.push("invalid routing state");
   }
 
+  const network=snapshot.collectionNetwork;
+  if(!object(network)||typeof network.hubBuilt!=="boolean"||!["auto","processing-first","barn-first"].includes(network.routingMode)||!object(network.boxes)||!object(network.processingIntake)||!object(network.courier)||!object(network.sourceAgesMs)) errors.push("invalid collection network");
+  else {
+    for(const id of ["wheat","corn","egg"] as const){const box=network.boxes[id];if(!object(box)||typeof box.built!=="boolean"||!validAmounts(box.amounts)||!finiteNonNegative(box.capacity)||RESOURCE_IDS.reduce((n,r)=>n+box.amounts[r],0)>box.capacity||RESOURCE_IDS.some(r=>r!==id&&box.amounts[r]!==0)||(!box.built&&RESOURCE_IDS.some(r=>box.amounts[r]!==0))||!finiteNonNegative(network.sourceAgesMs[id]))errors.push("invalid collection box");}
+    const intake=network.processingIntake;if(!validAmounts(intake.amounts)||!finiteNonNegative(intake.capacity)||RESOURCE_IDS.reduce((n,r)=>n+intake.amounts[r],0)>intake.capacity||intake.amounts.bread!==0||intake.amounts.cornbread!==0||!finiteNonNegative(intake.roundRobinIndex))errors.push("invalid processing intake");
+    const courier=network.courier,capacities=[0,10,14,18];if(typeof courier.hired!=="boolean"||![0,1,2,3].includes(courier.level)||courier.hired!==(courier.level>0)||courier.capacity!==capacities[courier.level]||!validAmounts(courier.carried)||RESOURCE_IDS.reduce((n,r)=>n+courier.carried[r],0)>courier.capacity||!["not-hired","idle-at-hub","select-source","moving-to-source","loading","waiting-for-batch","select-destination","moving-to-processing","moving-to-barn","unloading-processing","unloading-barn","returning-to-hub"].includes(courier.stage)||!(courier.sourceId===null||["wheat","corn","egg"].includes(courier.sourceId))||!(courier.destinationId===null||["processing-intake","barn"].includes(courier.destinationId))||!finiteNonNegative(courier.waitMs)||!finiteNonNegative(courier.sourceRoundRobinIndex))errors.push("invalid collection courier");
+  }
+
   if (
     !object(snapshot.operations) ||
     !(

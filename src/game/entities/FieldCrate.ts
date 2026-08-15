@@ -36,7 +36,7 @@ export class FieldCrate extends Phaser.GameObjects.Container {
       })
       .setOrigin(0.5);
     const pickup = scene.add
-      .text(0, 78, "受取エリア　麦を背負い籠へ移す", {
+      .text(0, 78, "受取エリア　麦を持ち物に移す", {
         fontFamily: "system-ui",
         fontSize: "15px",
         color: "#49382e",

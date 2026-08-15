@@ -354,7 +354,7 @@ export class ExpansionSystem {
       this.emitHint(
         `carry-${result.reason}`,
         result.reason === "maximum"
-          ? "背負い籠は最大容量です"
+          ? "運搬かごは最大容量です"
           : UI_TEXT.messages.insufficientCoins,
       );
       return;
