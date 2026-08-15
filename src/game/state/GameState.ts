@@ -1,7 +1,7 @@
 import type { Inventory } from "../logic/inventory";
 import { GAME_CONFIG } from "../config/gameConfig";
 import { emptyResourceAmounts, RESOURCE_MARKET_CAPACITIES, type ResourceAmounts } from "../config/resourceDefinitions";
-import type { CarriedInventory } from "../logic/resources";
+import { createCarriedCargo, type CarriedCargo } from "../logic/resources";
 import type { CarryCapacityLevel } from "../logic/carryUpgrade";
 import type { LandExpansionState } from "../logic/landExpansion";
 import type { LivestockInventory } from "../logic/livestock";
@@ -11,10 +11,11 @@ export interface Economy {
   wheatUnitPrice: number;
   soldUnits: number;
   customersServed: number;
+  customersLeftWithoutPurchase?: number;
 }
 export interface GameState {
   inventory: Inventory;
-  carriedInventory: CarriedInventory;
+  cargo: CarriedCargo;
   barn: ResourceAmounts;
   market: ResourceAmounts;
   marketCapacity: ResourceAmounts;
@@ -26,7 +27,11 @@ export interface GameState {
   workers: {
     harvestWorker: { hired: boolean; carried: number; status: string };
     transportWorker: { hired: boolean; carried: number; status: string };
+    cornHarvestWorker: { hired: boolean; carried: number; status: string };
+    cornTransportWorker: { hired: boolean; carried: number; status: string };
+    poultryCaretaker: { hired: boolean; resource: "corn" | "egg" | null; carried: number; status: string };
   };
+  automation: { cornFieldCrate: number; cornFieldCrateCapacity: number };
   harvestedTotal: number;
   deliveredOnce: boolean;
   firstSaleCompleted: boolean;
@@ -48,7 +53,7 @@ export function createGameState(): GameState {
       marketCapacity: GAME_CONFIG.marketShelfCapacity,
       fieldCrateCapacity: GAME_CONFIG.fieldCrateCapacity,
     },
-    carriedInventory: { resource: null, count: 0, capacity: 12 },
+    cargo: createCarriedCargo(GAME_CONFIG.carryCapacity),
     barn: emptyResourceAmounts(),
     market: emptyResourceAmounts(),
     marketCapacity: { ...RESOURCE_MARKET_CAPACITIES },
@@ -61,12 +66,17 @@ export function createGameState(): GameState {
       wheatUnitPrice: GAME_CONFIG.wheatUnitPrice,
       soldUnits: 0,
       customersServed: 0,
+      customersLeftWithoutPurchase: 0,
     },
     upgrades: { harvestSpeedLevel: 0, carryCapacityLevel: 0 },
     workers: {
       harvestWorker: { hired: false, carried: 0, status: "未雇用" },
       transportWorker: { hired: false, carried: 0, status: "未雇用" },
+      cornHarvestWorker: { hired: false, carried: 0, status: "未雇用" },
+      cornTransportWorker: { hired: false, carried: 0, status: "未雇用" },
+      poultryCaretaker: { hired: false, resource: null, carried: 0, status: "未雇用" },
     },
+    automation: { cornFieldCrate: 0, cornFieldCrateCapacity: GAME_CONFIG.cornFieldCrateCapacity },
     harvestedTotal: 0,
     deliveredOnce: false,
     firstSaleCompleted: false,

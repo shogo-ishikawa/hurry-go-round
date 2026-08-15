@@ -45,3 +45,7 @@ The harvest worker uses olive headwear and warm work clothes; the transport work
 - Resource cargo stays readable at 12, 18, and 24 capacity: wheat bundles, yellow/green corn, and cream eggs in compact crate rows are visually distinct.
 - Facility copy belongs to reusable timber signs, mounted plates, bubbles, or camera-fixed panels. Interaction floors use rings and pictograms only; ordinary scenery never receives an interaction circle.
 - Locked parcels use muted ground, timber gates and a drawn lock. Unlocking removes the gate rather than leaving a debug boundary visible.
+
+## v0.6.0 mixed cargo and operations
+
+The farmer basket composes wheat, corn, and egg clusters at the same time, caps each cluster visually, and uses a red securing strap at full shared capacity. Facility signs use coordinated anchors and distance LOD. Coop fixtures use a long corn-visible trough on the left and a roofed straw egg rack on the right; worker tools, carts, crop ears, chicken posture, wood joints, road ruts, and upper-left highlights retain the shared warm-outline treatment.

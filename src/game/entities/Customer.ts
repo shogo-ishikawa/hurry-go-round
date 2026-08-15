@@ -2,6 +2,8 @@ import Phaser from "phaser";
 import { palette } from "../art/palette";
 import type { CustomerPhase } from "../logic/customerQueue";
 import type { ResourceId } from "../config/resourceDefinitions";
+import { createCustomerPatienceState, type CustomerPatienceState } from "../logic/customerPatience";
+import { GAME_CONFIG } from "../config/gameConfig";
 const shirts = [palette.plum, palette.sky, palette.coral, palette.teal];
 const hairs = [
   palette.outline,
@@ -13,10 +15,12 @@ export class Customer extends Phaser.GameObjects.Container {
   phase: CustomerPhase = "entering";
   purchased = false;
   requestedResource: ResourceId = "wheat";
+  patience: CustomerPatienceState = createCustomerPatienceState(GAME_CONFIG.customerStockoutPatienceMs);
   readonly id: number;
   private bubble: Phaser.GameObjects.Container;
   private bag: Phaser.GameObjects.Graphics;
   private phaseTime = 0;
+  private patienceBar: Phaser.GameObjects.Graphics;
   constructor(scene: Phaser.Scene, id: number, x: number, y: number) {
     const variant = id % 4;
     const shadow = scene.add.ellipse(0, 2, 44, 16, palette.shadow, 0.24);
@@ -45,10 +49,12 @@ export class Customer extends Phaser.GameObjects.Container {
       .setStrokeStyle(2, palette.outline);
     const mark = scene.add.graphics();
     const bubble = scene.add.container(0, 0, [cloud, mark]).setVisible(false);
-    super(scene, x, y, [shadow, art, bag, bubble]);
+    const patienceBar = scene.add.graphics();
+    super(scene, x, y, [shadow, art, bag, bubble, patienceBar]);
     this.id = id;
     this.bubble = bubble;
     this.bag = bag;
+    this.patienceBar = patienceBar;
     this.drawRequest(mark, "wheat");
     scene.add.existing(this);
     this.setDepth(y + 70);
@@ -69,7 +75,9 @@ export class Customer extends Phaser.GameObjects.Container {
   }
   showOutOfStock(show: boolean): void {
     this.bubble.setVisible(show);
+    if (!show) this.patienceBar.clear();
   }
+  showPatience(ratio: number): void { const value = Phaser.Math.Clamp(ratio, 0, 1); const color = value < .2 ? 0xb9573f : value <= .5 ? 0xe98b3a : 0xf2c84b; this.patienceBar.clear().fillStyle(palette.outline, .85).fillRoundedRect(-34, -106, 68, 8, 4).fillStyle(color).fillRoundedRect(-32, -104, 64 * value, 4, 2); }
   setRequestedResource(resource: ResourceId): void { this.requestedResource = resource; const mark = this.bubble.list[1]; if (mark instanceof Phaser.GameObjects.Graphics) this.drawRequest(mark, resource); }
   giveBag(resource: ResourceId = this.requestedResource): void {
     const color = resource === "corn" ? 0xf2c84b : resource === "egg" ? palette.cream : palette.wheat;

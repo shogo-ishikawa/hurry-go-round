@@ -12,10 +12,10 @@ import {
   getAutomationWheatTotal,
   harvestWorkerCollectOne,
   loadTransportWorkerOne,
-  playerCollectFromFieldCrateOne,
   unloadTransportWorkerOne,
   type AutomationState,
 } from "../logic/workers";
+import { addCargoOne } from "../logic/resources";
 import { palette } from "../art/palette";
 export type HarvestWorkerPhase =
   | "idle"
@@ -102,11 +102,14 @@ export class WorkerSystem {
     a: AutomationState,
     extra: Partial<GameState> = {},
   ): void {
+    const barn = a.inventory.barn !== s.inventory.barn ? { ...s.barn, wheat: s.barn.wheat + (a.inventory.barn - s.inventory.barn) } : s.barn;
     this.setState({
       ...s,
       ...extra,
       inventory: a.inventory,
+      barn,
       workers: {
+        ...s.workers,
         harvestWorker: { ...s.workers.harvestWorker, ...a.harvestWorker },
         transportWorker: { ...s.workers.transportWorker, ...a.transportWorker },
       },
@@ -128,10 +131,11 @@ export class WorkerSystem {
     this.pickupTimer += delta;
     if (this.pickupTimer < GAME_CONFIG.fieldCratePickupIntervalMs) return;
     this.pickupTimer -= GAME_CONFIG.fieldCratePickupIntervalMs;
-    const r = playerCollectFromFieldCrateOne(this.automation(s));
+    if (s.inventory.fieldCrate <= 0) return;
+    const r = addCargoOne(s.cargo, "wheat");
     if (!r.changed) return;
-    this.apply(s, r.state, { firstFieldCratePickup: true });
-    this.farmer.setCarried(r.state.inventory.carried);
+    this.setState({ ...s, cargo: r.cargo, inventory: { ...s.inventory, fieldCrate: s.inventory.fieldCrate - 1 }, firstFieldCratePickup: true });
+    this.farmer.setCargo(r.cargo.amounts, r.cargo.capacity);
     this.effect(
       GAME_CONFIG.fieldCrate.x,
       GAME_CONFIG.fieldCrate.y,

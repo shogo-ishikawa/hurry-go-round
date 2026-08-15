@@ -5,7 +5,7 @@ import { CornNode } from "../entities/CornNode";
 import { Chicken } from "../entities/Chicken";
 import { WorldSign } from "../entities/WorldSign";
 import type { Farmer } from "../entities/Farmer";
-import { collectResourceOne } from "../logic/resources";
+import { addCargoOne } from "../logic/resources";
 import { purchaseCarryUpgrade, getCarryCapacityForLevel, getCarryUpgradeCost } from "../logic/carryUpgrade";
 import { purchaseLandExpansion, type LandExpansionId } from "../logic/landExpansion";
 import { collectEggOne, depositCornFeedOne, produceEggOne } from "../logic/livestock";
@@ -42,12 +42,12 @@ export class ExpansionSystem {
   isLockedPoint(x: number, y: number): boolean { return this.constrainPosition(x, y).blocked; }
   private tryHarvestCorn(): void { if (this.harvestTimer > 0) return; const state = this.getState(); let nearest: CornNode | undefined; let best = GAME_CONFIG.harvestRange ** 2;
     for (const crop of this.corn) { if (crop.model.state !== "ready") continue; const d = Phaser.Math.Distance.Squared(this.farmer.x, this.farmer.y, crop.x, crop.y); if (d <= best) { best = d; nearest = crop; } }
-    if (!nearest) return; const result = collectResourceOne(state.carriedInventory, "corn"); if (!result.changed) { if (result.reason === "different-resource") this.emitHint("mixed", UI_TEXT.messages.mixed); return; }
-    if (!nearest.harvest()) return; this.harvestTimer = GAME_CONFIG.cornHarvestIntervalsByLevel[state.upgrades.harvestSpeedLevel] ?? 420; this.setState({ ...state, carriedInventory: result.value }); this.farmer.setCarried(result.value.count, result.value.resource);
+    if (!nearest) return; const result = addCargoOne(state.cargo, "corn"); if (!result.changed) return;
+    if (!nearest.harvest()) return; this.harvestTimer = GAME_CONFIG.cornHarvestIntervalsByLevel[state.upgrades.harvestSpeedLevel] ?? 420; this.setState({ ...state, cargo: result.cargo }); this.farmer.setCargo(result.cargo.amounts, result.cargo.capacity);
   }
-  private updateLivestock(delta: number): void { let state = this.getState(); const feedNear = this.near(GAME_CONFIG.feedTrough); if (feedNear && this.feedTimer <= 0) { const r = depositCornFeedOne(state.carriedInventory, state.livestock); if (r.changed) { state = { ...state, carriedInventory: r.carried, livestock: r.livestock }; this.setState(state); this.farmer.setCarried(r.carried.count, r.carried.resource); this.feedTimer = GAME_CONFIG.feedDepositIntervalMs; } }
+  private updateLivestock(delta: number): void { let state = this.getState(); const feedNear = this.near(GAME_CONFIG.feedTrough); if (feedNear && this.feedTimer <= 0) { const r = depositCornFeedOne(state.cargo, state.livestock); if (r.changed) { state = { ...state, cargo: r.carried, livestock: r.livestock }; this.setState(state); this.farmer.setCargo(r.carried.amounts, r.carried.capacity); this.feedTimer = GAME_CONFIG.feedDepositIntervalMs; } }
     this.eggProductionTimer -= delta; if (this.eggProductionTimer <= 0) { this.eggProductionTimer += GAME_CONFIG.eggProductionIntervalMs; const r = produceEggOne(state.livestock); if (r.changed) { state = { ...state, livestock: r.livestock }; this.setState(state); } }
-    if (this.near(GAME_CONFIG.eggStorage) && this.eggPickupTimer <= 0) { const r = collectEggOne(state.carriedInventory, state.livestock); if (r.changed) { this.setState({ ...state, carriedInventory: r.carried, livestock: r.livestock }); this.farmer.setCarried(r.carried.count, r.carried.resource); this.eggPickupTimer = GAME_CONFIG.eggPickupIntervalMs; } }
+    if (this.near(GAME_CONFIG.eggStorage) && this.eggPickupTimer <= 0) { const r = collectEggOne(state.cargo, state.livestock); if (r.changed) { this.setState({ ...state, cargo: r.carried, livestock: r.livestock }); this.farmer.setCargo(r.carried.amounts, r.carried.capacity); this.eggPickupTimer = GAME_CONFIG.eggPickupIntervalMs; } }
   }
   private updateLandPurchase(delta: number): void { const state = this.getState(); let id: LandExpansionId | null = null; if (!state.landExpansion.eastCornFieldUnlocked && this.near(GAME_CONFIG.eastPurchase)) id = "eastCornField"; else if (!state.landExpansion.southChickenCoopUnlocked && this.near(GAME_CONFIG.southPurchase)) id = "southChickenCoop";
     if (id !== this.purchaseId) { this.purchaseId = id; this.purchaseTimer = 0; } if (!id) return; this.purchaseTimer += delta; if (this.purchaseTimer < GAME_CONFIG.landPurchaseHoldDurationMs) return;
@@ -55,7 +55,7 @@ export class ExpansionSystem {
     this.setState({ ...state, economy: { ...state.economy, walletCoins: r.walletCoins }, landExpansion: r.land }); this.syncVisibility();
   }
   private updateCarryUpgrade(delta: number): void { const near = this.near(GAME_CONFIG.carryUpgrade); if (!near) { this.carryTimer = 0; this.carryArmed = true; return; } if (!this.carryArmed) return; this.carryTimer += delta; if (this.carryTimer < GAME_CONFIG.carryUpgradeHoldDurationMs) return; const state = this.getState(); const r = purchaseCarryUpgrade(state.economy.walletCoins, state.upgrades.carryCapacityLevel); this.carryTimer = 0; this.carryArmed = false; if (!r.purchased) { this.emitHint(`carry-${r.reason}`, r.reason === "maximum" ? "背負い籠は最大容量です" : UI_TEXT.messages.insufficientCoins); return; }
-    const capacity = getCarryCapacityForLevel(r.level); this.setState({ ...state, economy: { ...state.economy, walletCoins: r.walletCoins }, upgrades: { ...state.upgrades, carryCapacityLevel: r.level }, carriedInventory: { ...state.carriedInventory, capacity }, inventory: { ...state.inventory, capacity } }); this.updateCarrySign(r.level);
+    const capacity = getCarryCapacityForLevel(r.level); this.setState({ ...state, economy: { ...state.economy, walletCoins: r.walletCoins }, upgrades: { ...state.upgrades, carryCapacityLevel: r.level }, cargo: { ...state.cargo, capacity } }); this.updateCarrySign(r.level);
   }
   private updateCarrySign(level: 0 | 1 | 2): void { const cost = getCarryUpgradeCost(level); this.carrySign.setLines(cost === null ? [UI_TEXT.facilities.carry, "最大容量　24個"] : [UI_TEXT.facilities.carry, `${getCarryCapacityForLevel(level)} → ${getCarryCapacityForLevel((level + 1) as 1 | 2)}　${cost}コイン`]); }
   private updateHint(): void { const state = this.getState(); if (!state.landExpansion.eastCornFieldUnlocked && this.mid(GAME_CONFIG.eastPurchase)) this.emitHint("east", UI_TEXT.messages.purchaseHint); else if (!state.landExpansion.southChickenCoopUnlocked && this.mid(GAME_CONFIG.southPurchase)) this.emitHint("south", state.landExpansion.eastCornFieldUnlocked ? UI_TEXT.messages.purchaseHint : UI_TEXT.messages.eastRequired); else if (state.landExpansion.southChickenCoopUnlocked && this.mid(GAME_CONFIG.feedTrough) && state.livestock.feed === 0) this.emitHint("feed", UI_TEXT.messages.feedEmpty); else this.hintId = ""; }

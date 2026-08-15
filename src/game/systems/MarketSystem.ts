@@ -9,6 +9,8 @@ import { canFrontBuy, canSpawn } from "../logic/customerQueue";
 import type { Farmer } from "../entities/Farmer";
 import type { GameState } from "../state/GameState";
 import { palette } from "../art/palette";
+import { UI_TEXT } from "../config/localization";
+import { hasCustomerPatienceExpired, resetStockoutWait, startOrAdvanceStockoutWait } from "../logic/customerPatience";
 
 export class MarketSystem {
   private stall: MarketStall;
@@ -94,7 +96,7 @@ export class MarketSystem {
           this.queue.push(c);
           c.phase = this.queue.length === 1 ? "buying" : "queueing";
         }
-      } else if (c.phase === "queueing" || c.phase === "buying") {
+      } else if (c.phase === "queueing" || c.phase === "buying" || c.phase === "waiting-stock") {
         const index = this.queue.indexOf(c);
         const slot = this.queueSlots[index];
         if (slot) c.moveToward(slot, delta);
@@ -104,7 +106,7 @@ export class MarketSystem {
     const state = this.getState();
     if (front) {
       const atFront =
-        front.phase === "buying" &&
+        (front.phase === "buying" || front.phase === "waiting-stock") &&
         Phaser.Math.Distance.Between(
           front.x,
           front.y,
@@ -112,7 +114,12 @@ export class MarketSystem {
           this.queueSlots[0]?.y ?? 0,
         ) < 8;
       const requestedStock = state.market[front.requestedResource];
-      front.showOutOfStock(atFront);
+      const stockout = atFront && requestedStock <= 0;
+      front.showOutOfStock(stockout);
+      front.patience = startOrAdvanceStockoutWait(front.patience, delta, { isFront: true, atPurchasePosition: atFront, stockAvailable: requestedStock > 0, purchased: front.purchased });
+      if (stockout) { front.phase = "waiting-stock"; front.showPatience(1 - front.patience.stockoutWaitMs / front.patience.stockoutPatienceMs); }
+      else if (front.phase === "waiting-stock") { front.phase = "buying"; front.patience = resetStockoutWait(front.patience); }
+      if (stockout && hasCustomerPatienceExpired(front.patience)) { this.abandon(front); }
       if (
         atFront &&
         canFrontBuy(
@@ -132,13 +139,21 @@ export class MarketSystem {
     for (let i = this.customers.length - 1; i >= 0; i--) {
       const c = this.customers[i];
       if (
-        c?.phase === "leaving" &&
+        (c?.phase === "leaving" || c?.phase === "leaving-disappointed") &&
         Phaser.Math.Distance.Between(c.x, c.y, this.exit.x, this.exit.y) < 8
       ) {
         c.destroy();
         this.customers.splice(i, 1);
       }
     }
+  }
+  private abandon(customer: Customer): void {
+    if (this.queue[0] !== customer || customer.purchased || customer.phase === "leaving-disappointed") return;
+    const s = this.getState();
+    this.queue.shift(); customer.phase = "leaving-disappointed"; customer.showOutOfStock(false); this.purchaseTimer = 0;
+    for (let i = 0; i < this.queue.length; i++) this.queue[i]!.phase = i === 0 ? "buying" : "queueing";
+    this.setState({ ...s, economy: { ...s.economy, customersLeftWithoutPurchase: (s.economy.customersLeftWithoutPurchase ?? 0) + 1 } });
+    this.scene.game.events.emit("context-hint", UI_TEXT.messages.customerAbandoned);
   }
   private completeSale(customer: Customer): void {
     const s = this.getState();

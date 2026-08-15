@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { palette } from '../art/palette';
-import type { ResourceId } from '../config/resourceDefinitions';
+import { RESOURCE_IDS, emptyResourceAmounts, type ResourceAmounts } from '../config/resourceDefinitions';
 export type Facing = 'front' | 'back' | 'left' | 'right';
 
 export class Farmer extends Phaser.GameObjects.Container {
@@ -13,8 +13,8 @@ export class Farmer extends Phaser.GameObjects.Container {
   private rightArm: Phaser.GameObjects.Rectangle;
   private facing: Facing = 'front';
   private phase = 0;
-  private carried = -1;
-  private carriedResource: ResourceId | null = null;
+  private cargo: ResourceAmounts = emptyResourceAmounts();
+  private cargoCapacity = 12;
 
   constructor(scene: Phaser.Scene, x: number, y: number) {
     const shadow = scene.add.ellipse(0, 2, 54, 20, palette.shadow, 0.28);
@@ -29,7 +29,7 @@ export class Farmer extends Phaser.GameObjects.Container {
     this.leftLeg = leftLeg; this.rightLeg = rightLeg; this.leftArm = leftArm; this.rightArm = rightArm;
     scene.add.existing(this);
     this.setSize(56, 84).setScale(0.85);
-    this.drawBody(); this.setCarried(0);
+    this.drawBody(); this.setCargo(emptyResourceAmounts(), 12);
   }
 
   setFacingFromVector(x: number, y: number): void {
@@ -37,10 +37,8 @@ export class Farmer extends Phaser.GameObjects.Container {
     if (next !== this.facing) { this.facing = next; this.drawBody(); this.drawStack(); }
   }
 
-  setCarried(count: number, resource: ResourceId | null = count > 0 ? "wheat" : null): void {
-    if (count !== this.carried || resource !== this.carriedResource) {
-      this.carried = count; this.carriedResource = resource; this.drawStack();
-    }
+  setCargo(amounts: ResourceAmounts, capacity: number): void {
+    this.cargo = { ...amounts }; this.cargoCapacity = capacity; this.drawStack();
   }
 
   playHarvestMotion(): void {
@@ -87,19 +85,21 @@ export class Farmer extends Phaser.GameObjects.Container {
 
   private drawStack(): void {
     const g = this.stack.clear();
-    if (this.carried <= 0) return;
+    const total = RESOURCE_IDS.reduce((sum, id) => sum + this.cargo[id], 0);
+    if (total <= 0) return;
     const behind = this.facing === 'back';
     const xShift = this.facing === 'left' ? 23 : this.facing === 'right' ? -23 : behind ? 20 : -24;
-    const visible = Math.min(this.carried, 24);
-    for (let i = 0; i < visible; i += 1) {
+    const resources = RESOURCE_IDS.flatMap((id) => Array(Math.min(this.cargo[id], 8)).fill(id));
+    for (let i = 0; i < resources.length; i += 1) {
       const row = Math.floor(i / 4); const col = i % 4;
       const x = xShift + (col - 1) * 10 + (row % 2) * 4;
       const y = 49 - row * 10;
       g.lineStyle(1.5, palette.outline);
-      if (this.carriedResource === "egg") {
+      const resource = resources[i];
+      if (resource === "egg") {
         g.fillStyle(palette.path).fillRoundedRect(x - 6, y - 6, 13, 10, 2).strokeRoundedRect(x - 6, y - 6, 13, 10, 2);
         g.fillStyle(palette.cream).fillEllipse(x, y - 4, 7, 9);
-      } else if (this.carriedResource === "corn") {
+      } else if (resource === "corn") {
         g.fillStyle(0xf2c84b).fillEllipse(x, y - 5, 8, 14).strokeEllipse(x, y - 5, 8, 14);
         g.lineStyle(2, palette.foliage).lineBetween(x - 4, y, x - 8, y - 9).lineBetween(x + 4, y, x + 8, y - 9);
       } else {
@@ -107,5 +107,6 @@ export class Farmer extends Phaser.GameObjects.Container {
         g.lineStyle(2, palette.wheatLight).lineBetween(x, y - 6, x + 3, y - 13);
       }
     }
+    if (total >= this.cargoCapacity) g.lineStyle(3, 0xb9573f).lineBetween(xShift - 20, 43, xShift + 25, 20);
   }
 }

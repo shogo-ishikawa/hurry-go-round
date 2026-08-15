@@ -98,6 +98,7 @@ export class HiringSystem {
       ...s,
       economy: { ...s.economy, walletCoins: r.state.walletCoins },
       workers: {
+        ...s.workers,
         harvestWorker: {
           ...s.workers.harvestWorker,
           hired: r.state.harvestHired,
