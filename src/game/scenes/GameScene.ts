@@ -30,6 +30,7 @@ import type { ResourceId } from "../config/resourceDefinitions";
 import { palette } from "../art/palette";
 import type { PersistedGameSnapshot } from "../persistence/saveSchema";
 import { createPersistedSnapshot } from "../logic/saveSnapshot";
+import { normalizeDurationMs } from "../logic/normalizePersistedSnapshot";
 import { INTERACTIONS } from "../logic/facilities";
 import { createWorkerProgress, hireWorkerByRole, trainWorker, type WorkerRoleId } from "../logic/workforce";
 import { advanceCows, advanceDairyCycle, startDairyCycle } from "../logic/dairy";
@@ -141,7 +142,7 @@ export class GameScene extends Phaser.Scene {
     this.game.events.on(GAME_EVENTS.operationsAction,this.handleOperationsAction,this);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, this.cleanup, this);
   }
-  getPersistedSnapshot(sequence:number):PersistedGameSnapshot{return createPersistedSnapshot(this.state,{player:{x:this.farmer.x,y:this.farmer.y,facing:"front"},crops:this.crops.map((c,i)=>({id:`wheat-${String(i).padStart(3,"0")}`,resource:"wheat",state:c.model.state,remainingMs:Math.max(0,c.model.regrowMs-c.model.elapsedMs)})),playTimeMs:this.time.now,saveSequence:sequence});}
+  getPersistedSnapshot(sequence:number):PersistedGameSnapshot{return createPersistedSnapshot(this.state,{player:{x:this.farmer.x,y:this.farmer.y,facing:"front"},crops:this.crops.map((c,i)=>({id:`wheat-${String(i).padStart(3,"0")}`,resource:"wheat",state:c.model.state,remainingMs:normalizeDurationMs(c.model.regrowMs-c.model.elapsedMs)})),playTimeMs:this.time.now,saveSequence:sequence});}
   private restoreSnapshot(s:PersistedGameSnapshot):void{const fresh=createGameState();this.state={...fresh,cargo:{amounts:{...s.cargo.amounts},capacity:s.cargo.capacity},barn:{...s.storage.barn},market:{...s.storage.market},marketCapacity:{...s.storage.marketCapacity},soldByResource:{...s.economy.soldByResource},landExpansion:{...s.landExpansion},livestock:{feed:s.livestock.feed,feedCapacity:s.livestock.feedCapacity,eggs:s.livestock.eggs,eggCapacity:s.livestock.eggCapacity},economy:{...fresh.economy,walletCoins:s.economy.walletCoins,tillCoins:s.economy.tillCoins,soldUnits:s.economy.soldUnits,customersServed:s.economy.customersServed,customersLeftWithoutPurchase:s.economy.customersLeftWithoutPurchase,contractCoinsEarned:s.economy.contractCoinsEarned},upgrades:{...s.upgrades},workers:{harvestWorker:{...fresh.workers.harvestWorker,...s.workers.harvestWorker},transportWorker:{...fresh.workers.transportWorker,...s.workers.transportWorker},cornHarvestWorker:{...fresh.workers.cornHarvestWorker,...s.workers.cornHarvestWorker},cornTransportWorker:{...fresh.workers.cornTransportWorker,...s.workers.cornTransportWorker},poultryCaretaker:{...fresh.workers.poultryCaretaker,...s.workers.poultryCaretaker}},automation:{...fresh.automation,cornFieldCrate:s.automation.cornFieldCrate},inventory:{...fresh.inventory,fieldCrate:s.automation.wheatFieldCrate},contracts:structuredClone(s.contracts),processing:structuredClone(s.processing),collectionNetwork:structuredClone(s.collectionNetwork),dairy:structuredClone(s.dairy),harvestedTotal:s.statistics.harvestedTotal,...s.progression};this.registry.set("restored-player",s.player);}
   update(time: number, delta: number): void {
     const direction = this.readDirection();
