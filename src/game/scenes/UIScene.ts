@@ -4,7 +4,9 @@ import { VirtualJoystick } from "../input/VirtualJoystick";
 import { calculateInputLayout } from "../input/inputLayout";
 import { GAME_EVENTS, type GameState } from "../state/GameState";
 import type { Point } from "../logic/movement";
+
 let portraitNoticeShown = false;
+
 export class UIScene extends Phaser.Scene {
   private carriedText!: Phaser.GameObjects.Text;
   private barnText!: Phaser.GameObjects.Text;
@@ -19,31 +21,34 @@ export class UIScene extends Phaser.Scene {
   private fullBadge!: Phaser.GameObjects.Text;
   private versionText!: Phaser.GameObjects.Text;
   private lastState?: GameState;
+
   constructor() {
     super("ui");
   }
+
   create(): void {
     this.panels = this.add.graphics();
     this.meters = this.add.graphics();
     const style: Phaser.Types.GameObjects.Text.TextStyle = {
-      fontFamily: "system-ui",
+      fontFamily: "system-ui, sans-serif",
       fontSize: "18px",
       color: "#49382e",
       fontStyle: "bold",
     };
-    this.carriedText = this.add.text(27, 20, "PACK  0 / 12", style);
-    this.barnText = this.add.text(27, 52, "BARN  0", style);
-    this.marketText = this.add.text(0, 0, "MARKET  0 / 8", style);
-    this.tillText = this.add.text(0, 0, "TILL  0", style);
-    this.walletText = this.add.text(0, 0, "COINS  0", style);
+
+    this.carriedText = this.add.text(27, 20, "所持  0 / 12", style);
+    this.barnText = this.add.text(27, 52, "倉庫  0", style);
+    this.marketText = this.add.text(0, 0, "売り場  0 / 8", style);
+    this.tillText = this.add.text(0, 0, "未回収  0", style);
+    this.walletText = this.add.text(0, 0, "所持金  0", style);
     this.versionText = this.add.text(0, 0, "v0.3.0", {
       ...style,
       fontSize: "14px",
       color: "#755c49",
     });
     this.tutorial = this.add
-      .text(0, 0, "Move to the wheat", {
-        fontFamily: "system-ui",
+      .text(0, 0, "麦畑へ移動しましょう", {
+        fontFamily: "system-ui, sans-serif",
         fontSize: "17px",
         color: "#49382e",
         align: "center",
@@ -51,17 +56,22 @@ export class UIScene extends Phaser.Scene {
       })
       .setOrigin(0.5);
     this.moveHint = this.add
-      .text(0, 0, "WASD / arrows / joystick / click or tap", {
-        fontFamily: "system-ui",
-        fontSize: "15px",
-        color: "#fff4d8",
-        backgroundColor: "#49382ed9",
-        padding: { x: 12, y: 8 },
-      })
+      .text(
+        0,
+        0,
+        "WASD・矢印・ジョイスティック／クリック・タップ／ドラッグ",
+        {
+          fontFamily: "system-ui, sans-serif",
+          fontSize: "15px",
+          color: "#fff4d8",
+          backgroundColor: "#49382ed9",
+          padding: { x: 12, y: 8 },
+        },
+      )
       .setOrigin(0.5);
     this.fullBadge = this.add
-      .text(0, 0, "PACK FULL — DELIVER TO BARN", {
-        fontFamily: "system-ui",
+      .text(0, 0, "満載です — 納品エリアへ", {
+        fontFamily: "system-ui, sans-serif",
         fontSize: "18px",
         fontStyle: "bold",
         color: "#fff4d8",
@@ -70,6 +80,7 @@ export class UIScene extends Phaser.Scene {
       })
       .setOrigin(0.5)
       .setAlpha(0);
+
     this.joystick = new VirtualJoystick(this);
     this.game.events.on(GAME_EVENTS.state, this.updateState, this);
     this.game.events.on(GAME_EVENTS.full, this.showFull, this);
@@ -80,51 +91,61 @@ export class UIScene extends Phaser.Scene {
     this.layout();
     this.showPortraitNotice();
   }
+
   getDirection(): Point {
     return this.joystick?.direction ?? { x: 0, y: 0 };
   }
+
   fadeMoveHint(): void {
-    if (this.moveHint.alpha > 0)
+    if (this.moveHint.alpha > 0) {
       this.tweens.add({ targets: this.moveHint, alpha: 0, duration: 600 });
+    }
   }
+
   resetInput(): void {
     this.joystick?.reset();
   }
+
   private updateState(state: GameState): void {
     this.lastState = state;
     this.carriedText.setText(
-      `PACK  ${state.inventory.carried} / ${state.inventory.capacity}`,
+      `所持  ${state.inventory.carried} / ${state.inventory.capacity}`,
     );
-    this.barnText.setText(`BARN  ${state.inventory.barn}`);
+    this.barnText.setText(`倉庫  ${state.inventory.barn}`);
     this.marketText.setText(
-      `MARKET  ${state.inventory.market} / ${state.inventory.marketCapacity}`,
+      `売り場  ${state.inventory.market} / ${state.inventory.marketCapacity}`,
     );
-    this.tillText.setText(`TILL  ${state.economy.tillCoins}`);
-    this.walletText.setText(`COINS  ${state.economy.walletCoins}`);
+    this.tillText.setText(`未回収  ${state.economy.tillCoins}`);
+    this.walletText.setText(`所持金  ${state.economy.walletCoins}`);
+    this.fullBadge.setAlpha(
+      state.inventory.carried >= state.inventory.capacity ? 1 : 0,
+    );
     this.drawMeters();
   }
+
   private drawMeters(): void {
     const count = this.lastState?.inventory.carried ?? 0;
+    const capacity = this.lastState?.inventory.capacity ?? 12;
     const layout = calculateInputLayout(this.scale.width, this.scale.height);
     const g = this.meters.clear();
-    for (let i = 0; i < 12; i++) {
-      const x = layout.inventoryHud.x + 15 + i * 12;
+    for (let index = 0; index < capacity; index += 1) {
+      const x = layout.inventoryHud.x + 15 + index * 12;
       g.lineStyle(1, palette.outline, 0.5)
-        .fillStyle(i < count ? palette.wheat : palette.creamDark, 0.9)
+        .fillStyle(index < count ? palette.wheat : palette.creamDark, 0.9)
         .fillRoundedRect(x, layout.inventoryHud.y + 64, 9, 7, 2)
         .strokeRoundedRect(x, layout.inventoryHud.y + 64, 9, 7, 2);
     }
   }
+
   private showFull(): void {
     this.fullBadge.setAlpha(1).setScale(1.12);
     this.tweens.add({
       targets: this.fullBadge,
-      alpha: 0,
       scale: 1,
-      delay: 900,
-      duration: 500,
+      duration: 220,
     });
   }
+
   private pulseWallet(): void {
     this.tweens.add({
       targets: this.walletText,
@@ -133,87 +154,102 @@ export class UIScene extends Phaser.Scene {
       duration: 100,
     });
   }
+
   private updateTutorial(stage: number): void {
     const messages = [
-      "Move to the wheat",
-      "Harvest wheat and fill your pack",
-      "Deliver the full pack to the barn",
-      "The barn is ready — finish unloading",
-      "Watch the market shelf fill",
-      "Customers buy one bundle at a time",
-      "Collect coins at the market till",
-      "Stand on the Harvest Speed pad",
-      "Upgrade purchased — harvesting is faster!",
+      "麦畑へ移動しましょう",
+      "麦を収穫して背負い籠を満たしましょう",
+      "満載です。納品エリアへ向かいましょう",
+      "倉庫へ納品中です",
+      "倉庫から売り場へ商品が補充されます",
+      "お客さんが麦を購入しています",
+      "売上回収エリアでコインを受け取りましょう",
+      "収穫速度アップの購入エリアに立ちましょう",
+      "強化完了。収穫が速くなりました",
     ];
     this.tutorial.setText(messages[Math.min(stage, messages.length - 1)] ?? "");
-    if (stage >= 8)
+    if (stage >= 8) {
       this.tweens.add({
         targets: this.tutorial,
         alpha: 0,
         delay: 2000,
         duration: 900,
       });
+    }
   }
+
   private layout(): void {
-    const w = this.scale.width,
-      h = this.scale.height,
-      l = calculateInputLayout(w, h);
+    const width = this.scale.width;
+    const height = this.scale.height;
+    const layout = calculateInputLayout(width, height);
+
     this.panels
       .clear()
       .fillStyle(palette.cream, 0.94)
       .fillRoundedRect(
-        l.inventoryHud.x,
-        l.inventoryHud.y,
-        l.inventoryHud.width,
-        l.inventoryHud.height,
+        layout.inventoryHud.x,
+        layout.inventoryHud.y,
+        layout.inventoryHud.width,
+        layout.inventoryHud.height,
         18,
       )
       .lineStyle(3, palette.creamDark)
       .strokeRoundedRect(
-        l.inventoryHud.x,
-        l.inventoryHud.y,
-        l.inventoryHud.width,
-        l.inventoryHud.height,
+        layout.inventoryHud.x,
+        layout.inventoryHud.y,
+        layout.inventoryHud.width,
+        layout.inventoryHud.height,
         18,
       )
       .fillStyle(palette.cream, 0.94)
       .fillRoundedRect(
-        l.economyHud.x,
-        l.economyHud.y,
-        l.economyHud.width,
-        l.economyHud.height,
+        layout.economyHud.x,
+        layout.economyHud.y,
+        layout.economyHud.width,
+        layout.economyHud.height,
         18,
       )
       .lineStyle(3, palette.creamDark)
       .strokeRoundedRect(
-        l.economyHud.x,
-        l.economyHud.y,
-        l.economyHud.width,
-        l.economyHud.height,
+        layout.economyHud.x,
+        layout.economyHud.y,
+        layout.economyHud.width,
+        layout.economyHud.height,
         18,
       );
-    this.carriedText.setPosition(l.inventoryHud.x + 15, l.inventoryHud.y + 8);
-    this.barnText.setPosition(l.inventoryHud.x + 15, l.inventoryHud.y + 36);
-    this.marketText.setPosition(l.economyHud.x + 15, l.economyHud.y + 8);
-    this.tillText.setPosition(l.economyHud.x + 15, l.economyHud.y + 37);
-    this.walletText.setPosition(l.economyHud.x + 15, l.economyHud.y + 66);
-    this.versionText.setPosition(w - 60, h - 24);
+
+    this.carriedText.setPosition(
+      layout.inventoryHud.x + 15,
+      layout.inventoryHud.y + 8,
+    );
+    this.barnText.setPosition(
+      layout.inventoryHud.x + 15,
+      layout.inventoryHud.y + 36,
+    );
+    this.marketText.setPosition(layout.economyHud.x + 15, layout.economyHud.y + 8);
+    this.tillText.setPosition(layout.economyHud.x + 15, layout.economyHud.y + 37);
+    this.walletText.setPosition(layout.economyHud.x + 15, layout.economyHud.y + 66);
+    this.versionText.setPosition(width - 60, height - 24);
     this.tutorial
-      .setWordWrapWidth(Math.max(100, l.tutorial.width))
-      .setPosition(l.tutorial.x + l.tutorial.width / 2, l.tutorial.y + 25);
-    this.moveHint.setPosition(w / 2, h - 28).setVisible(w >= 900);
-    this.fullBadge.setPosition(w / 2, Math.min(135, h * 0.35));
+      .setWordWrapWidth(Math.max(100, layout.tutorial.width))
+      .setPosition(
+        layout.tutorial.x + layout.tutorial.width / 2,
+        layout.tutorial.y + 25,
+      );
+    this.moveHint.setPosition(width / 2, height - 28).setVisible(width >= 900);
+    this.fullBadge.setPosition(width / 2, Math.min(135, height * 0.35));
     this.joystick?.layout();
     this.joystick?.setEnabled(true);
     this.drawMeters();
     this.showPortraitNotice();
   }
+
   private showPortraitNotice(): void {
     if (portraitNoticeShown || this.scale.width >= this.scale.height) return;
     portraitNoticeShown = true;
     const notice = this.add
-      .text(this.scale.width / 2, 205, "Landscape gives you a wider view", {
-        fontFamily: "system-ui",
+      .text(this.scale.width / 2, 205, "横向きにすると広く遊べます", {
+        fontFamily: "system-ui, sans-serif",
         fontSize: "14px",
         color: "#49382e",
         backgroundColor: "#fff4d8e8",
@@ -228,6 +264,7 @@ export class UIScene extends Phaser.Scene {
       onComplete: () => notice.destroy(),
     });
   }
+
   private cleanup(): void {
     this.game.events.off(GAME_EVENTS.state, this.updateState, this);
     this.game.events.off(GAME_EVENTS.full, this.showFull, this);
