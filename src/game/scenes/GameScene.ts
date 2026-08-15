@@ -34,8 +34,7 @@ import { normalizeDurationMs } from "../logic/normalizePersistedSnapshot";
 import { INTERACTIONS } from "../logic/facilities";
 import { createWorkerProgress, hireWorkerByRole, trainWorker, type WorkerRoleId } from "../logic/workforce";
 import { advanceCows, advanceDairyCycle, startDairyCycle } from "../logic/dairy";
-import { advanceProductionCycle, startProductionCycle } from "../logic/processing";
-import { routeIntakeResourceOne } from "../logic/collectionNetwork";
+import { ProcessingSystem } from "../systems/ProcessingSystem";
 export class GameScene extends Phaser.Scene {
   private farmer!: Farmer;
   private crops: CropNode[] = [];
@@ -67,6 +66,7 @@ export class GameScene extends Phaser.Scene {
   private contractDirtyElapsed = 0;
   private contractKey!: Phaser.Input.Keyboard.Key;
   private operationsInRange=false;
+  private processingSystem!:ProcessingSystem;
   constructor() {
     super("game");
   }
@@ -128,6 +128,7 @@ export class GameScene extends Phaser.Scene {
     );
     this.expansion = new ExpansionSystem(this, this.farmer, () => this.state, (s) => this.setState(s));
     this.expandedAutomation = new ExpandedAutomationSystem(this, this.farmer, () => this.state, (s) => this.setState(s));
+    this.processingSystem=new ProcessingSystem(this,this.farmer,()=>this.state,(state)=>{this.state=state;},this.contractKey);
     this.scene.launch("ui");
     this.time.delayedCall(0, () => {
       this.ui = this.scene.get("ui") as UIScene;
@@ -176,11 +177,12 @@ export class GameScene extends Phaser.Scene {
     this.workers.update(delta);
     this.expansion.update(delta);
     this.expandedAutomation.update(delta);
-    this.updateProduction(delta);
+    this.processingSystem.update(delta);
+    this.updateDairy(delta);
     this.updateContracts(delta);
     this.updateOperations();
   }
-  private updateProduction(delta:number):void{let mill=advanceProductionCycle(this.state.processing.mill,delta).machine,bakery=advanceProductionCycle(this.state.processing.bakery,delta).machine;mill=startProductionCycle(mill,"grain-mill",["mill-flour","mill-cornmeal"]).machine;bakery=startProductionCycle(bakery,"bakery",["bakery-bread","bakery-cornbread"]).machine;const routed=routeIntakeResourceOne(this.state.collectionNetwork.processingIntake,mill.input.amounts,bakery.input.amounts,{mill:mill.input.capacity,bakery:bakery.input.capacity});mill={...mill,input:{...mill.input,amounts:routed.mill}};bakery={...bakery,input:{...bakery.input,amounts:routed.bakery}};const cows=advanceCows(this.state.dairy.cows,this.state.dairy.hayRack,this.state.dairy.milkTank,delta);let dairy={...this.state.dairy,...cows};dairy=advanceDairyCycle(dairy,delta);dairy=startDairyCycle(dairy);this.state={...this.state,processing:{...this.state.processing,mill,bakery},collectionNetwork:{...this.state.collectionNetwork,processingIntake:routed.intake},dairy};}
+  private updateDairy(delta:number):void{const cows=advanceCows(this.state.dairy.cows,this.state.dairy.hayRack,this.state.dairy.milkTank,delta);let dairy={...this.state.dairy,...cows};dairy=advanceDairyCycle(dairy,delta);dairy=startDairyCycle(dairy);this.state={...this.state,dairy};}
   private updateOperations():void{const action=INTERACTIONS.find(i=>i.id==="open-operations")!,inside=Phaser.Math.Distance.Between(this.farmer.x,this.farmer.y,action.center.x,action.center.y)<=action.radius;if(inside!==this.operationsInRange){this.operationsInRange=inside;this.game.events.emit(GAME_EVENTS.operationsRange,inside);}if(inside&&(Phaser.Input.Keyboard.JustDown(this.contractKey)||Phaser.Input.Keyboard.JustDown(this.cursors.space!)))this.game.events.emit(GAME_EVENTS.operationsOpen);}
   private handleOperationsAction(action:"hire"|"train",role:WorkerRoleId):void{const keys:Record<WorkerRoleId,keyof GameState["workers"]>={"wheat-harvester":"harvestWorker","wheat-transporter":"transportWorker","corn-harvester":"cornHarvestWorker","corn-transporter":"cornTransportWorker","poultry-caretaker":"poultryCaretaker"},key=keys[role],current=this.state.workers[key],hired=new Set<WorkerRoleId>();for(const [id,k] of Object.entries(keys) as [WorkerRoleId,keyof GameState["workers"]][])if(this.state.workers[k].hired)hired.add(id);const progress=createWorkerProgress(current.hired,key==="poultryCaretaker"?this.state.workers.poultryCaretaker.resource:role.startsWith("corn")?"corn":"wheat",current.carried);const result=action==="hire"?hireWorkerByRole(role,this.state.economy.walletCoins,progress,{eastUnlocked:this.state.landExpansion.eastCornFieldUnlocked,coopUnlocked:this.state.landExpansion.southChickenCoopUnlocked,hiredRoles:hired}):trainWorker(role,this.state.economy.walletCoins,progress);if(!result.changed){this.game.events.emit(GAME_EVENTS.hint,"条件またはコインが足りません");return;}this.setState({...this.state,economy:{...this.state.economy,walletCoins:result.wallet},workers:{...this.state.workers,[key]:{...current,hired:result.worker.hired,level:result.worker.level,status:action==="hire"?"作業場所へ移動中":"研修完了"}}});this.game.events.emit(GAME_EVENTS.dirty,"priority");}
   private createContractFacilities(): void {
@@ -396,6 +398,7 @@ export class GameScene extends Phaser.Scene {
     this.cancelPointTarget();
   }
   private cleanup(): void {
+    this.processingSystem?.destroy();
     this.input.off("pointerdown", this.beginPointer, this);
     this.input.off("pointermove", this.updatePointerDrag, this);
     this.input.off("pointerup", this.endPointer, this);
