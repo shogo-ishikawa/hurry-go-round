@@ -78,7 +78,11 @@ npm ci --no-audit --no-fund
 npm run dev
 npm run check
 npm run build
+npx playwright install chromium
+npm run e2e
 ```
+
+保存時は実行中の小数ミリ秒を正規化し、書き込み前後の検証と直前データへのロールバックを行います。IndexedDBを起動時に診断し、利用できないブラウザーではlocalStorageの簡易保存へ切り替えます。設定画面には現在の保存先と「保存機能を確認」を表示します。
 
 GitHub Pages用のVite baseは `/hurry-go-round/` です。`dist/` と `node_modules/` はコミットしません。
 
