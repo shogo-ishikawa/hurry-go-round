@@ -1,18 +1,28 @@
 # Hurry-Go-Round
 
-A bright browser farm game about keeping a satisfying field-to-barn circuit moving. **v0.2.0 — Visual Harvest Prototype** delivers the first complete loop: automatically harvest wheat, visibly carry it, unload it at the barn, and return while the field regrows.
+A bright browser farm game about keeping a satisfying farm-to-market circuit moving. **v0.3.0 — Market & First Upgrade Loop** adds customers, sales, collectible earnings, and the first progression purchase to the visual harvest prototype.
 
-## Current gameplay
+## Current gameplay loop
 
-Explore a 2000 × 1400 original farm as a female farmer. Approach mature wheat to harvest one bundle every 280 ms, up to a 12-bundle carrying limit. Follow the looping path to the red barn and enter its teal delivery zone to unload automatically. Harvested wheat shows stubble, passes through a growing stage, and returns in roughly eight seconds.
+1. Approach mature wheat to harvest automatically and fill the farmer’s visible 12-slot pack.
+2. Enter the barn delivery platform to unload one bundle at a time.
+3. The barn restocks the eight-slot market shelf one unit at a time.
+4. Customers arrive, form a FIFO queue, wait for stock, and buy one wheat for two coins.
+5. Sales accumulate as a physical coin pile at the market till rather than entering the wallet directly.
+6. Enter the marked cash zone to collect coins one at a time.
+7. Hold position on the Harvest Speed pad to purchase faster harvesting for 20, then 55 coins.
 
-The farmer supports held-direction movement and point navigation at the same time. A dedicated lower-left joystick remains available on PC, tablet, and mobile; WASD and arrow keys also work on desktop. Clicking or tapping the farm sets a destination, while dragging across the farm continually updates the destination. Manual keyboard or joystick input immediately cancels point movement.
+The 2000 × 1400 farm retains its looping path, two wheat plots, crop depletion and staged regrowth, barn, pond, fences, trees, flowers, and original vector-like farmer. Market stock, till earnings, wallet coins, and upgrade state share one authoritative game state.
 
-The farmer uses original layered vector art with a woven hat, flower pin, ponytail, expressive face, detailed overalls, walk animation, shadow, carrier basket, and visible wheat bundles. The empty basket remains visible before harvesting, then each collected unit adds one physical bundle to the stack. At 12 units, a red tie and flag mark the physical load as full.
+## Controls and responsive behavior
 
-Carry capacity is also shown in a synchronized responsive HUD. Twelve wheat-marked slots fill one by one, the remaining space is displayed numerically, the panel changes emphasis near capacity, and a persistent `PACK FULL` banner remains until unloading begins. The barn transfer removes both logical and visible bundles one at a time.
+- **WASD / arrow keys:** direct movement; this cancels a point destination.
+- **Virtual joystick:** available on desktop, mobile, and tablet; dragging it cancels point movement.
+- **Click or tap:** move toward a marked destination.
+- **Drag:** retarget the active destination continuously.
+- Harvesting, barn unloading, market restocking, sales, cash collection, and upgrade purchasing are automatic.
 
-The farm includes two wheat plots, layered grass and soil, a curved route, barn and loading platform, pond, fences, trees, flowers, crates, a barrel, and in-world guidance. A responsive HUD tracks carried and stored wheat while a short tutorial introduces the loop.
+The Phaser canvas uses `RESIZE`; responsive camera zoom updates on rotation or resize. HUD regions are excluded from point navigation. Desktop places inventory and economy panels on opposite sides; narrow portrait stacks them above the lower-left joystick and displays a one-time landscape suggestion.
 
 ## Setup and commands
 
@@ -23,54 +33,44 @@ npm ci --no-audit --no-fund
 npm run dev
 ```
 
-| Command | Purpose |
-| --- | --- |
-| `npm run dev` | Start the responsive Vite development server. |
-| `npm run build` | Type-check and create the production `dist/` bundle. |
-| `npm run typecheck` | Run strict TypeScript checking. |
-| `npm test` | Run deterministic Vitest tests once. |
-| `npm run check` | Run type checking and all tests. |
-
-## Controls and responsive behavior
-
-- **PC continuous movement:** hold the on-screen joystick, WASD, or an arrow key.
-- **PC point movement:** click a walkable farm point; click-drag to continually redirect the farmer.
-- **Mobile/tablet continuous movement:** press and drag the large joystick in the lower-left corner.
-- **Mobile/tablet point movement:** tap a walkable point; drag across the farm to continually redirect the farmer.
-- **Input priority:** any held keyboard or joystick direction cancels the current point destination immediately.
-- **Automatic actions:** harvesting and unloading require no action button.
-- **Portrait:** remains fully playable and shows a one-time, non-modal landscape suggestion.
-
-HUD, tutorial, movement-hint, version-label, and joystick regions are excluded from world navigation. A visible marker identifies the active destination and disappears on arrival or when manual movement takes control. The camera follows smoothly and recalculates zoom on resize or orientation change. HUD and joystick elements remain screen-sized rather than scaling with the world.
+| Command             | Purpose                                |
+| ------------------- | -------------------------------------- |
+| `npm run dev`       | Start the Vite development server.     |
+| `npm run build`     | Strictly type-check and build `dist/`. |
+| `npm run typecheck` | Run TypeScript without emitting files. |
+| `npm test`          | Run deterministic Vitest tests once.   |
+| `npm run check`     | Run type checking and all tests.       |
 
 ## Project structure
 
 ```text
 src/game/
-├── art/          shared palette, static farm drawing, bounded effects
-├── config/       centralized world and gameplay parameters
-├── entities/     farmer and crop visual entities
-├── input/        virtual joystick, pointer gestures, and responsive input layout
-├── logic/        pure camera, crop, inventory, capacity, and movement rules plus tests
-├── scenes/       separated world gameplay and camera-independent UI
-└── state/        single gameplay-state model and event contract
+├── art/          palette, terrain, farm and bounded effects
+├── config/       centralized gameplay and economy parameters
+├── entities/     farmer, crops, market, customers, and upgrade pad
+├── input/        joystick and tested responsive reserved-region layout
+├── logic/        pure movement, crops, inventory, market, queue, economy, upgrades
+├── scenes/       world owner and camera-independent responsive UI
+├── state/        authoritative game state and event contract
+└── systems/      market/customer/cash and upgrade runtime orchestration
 docs/
 ├── ART_DIRECTION.md
 ├── V0.1.0_SPEC.md
-└── V0.2.0_SPEC.md
+├── V0.2.0_SPEC.md
+└── V0.3.0_SPEC.md
 ```
 
-Phaser provides rendering, scenes, input, cameras, and tweens. Deterministic rules remain framework-independent and unit tested. All art is original and drawn locally with Phaser vector primitives; no runtime media, remote services, external fonts, or asset CDNs are used.
+Phaser supplies rendering, input, cameras, timing, and bounded tweens. Transaction and layout rules are deterministic TypeScript functions tested without Phaser. All visuals are original local vector primitives; there are no remote assets, services, fonts, APIs, or tracking.
 
-## Build and GitHub Pages
+## GitHub Pages
 
 ```bash
 npm run check
 npm run build
 ```
 
-Vite’s base path remains `/hurry-go-round/`, matching `https://<github-owner>.github.io/hurry-go-round/`. Pull requests run CI; pushes to `main` build and deploy `dist/` through GitHub Actions. Configure **Pages → Source** to **GitHub Actions**. Never commit `dist/` or `node_modules/`.
+Vite’s base remains `/hurry-go-round/`, matching `https://<github-owner>.github.io/hurry-go-round/`. Pull requests run CI, and pushes to `main` deploy the generated `dist/` artifact through GitHub Actions. Do not commit `dist/` or `node_modules/`.
 
 ## Intentionally deferred
 
-Customers, sales, coins, workers, automation, upgrades, land purchases, save data, IndexedDB, PWA installation, service workers, offline mode, audio, accounts, analytics, advertising, external APIs, multiple scenarios, animals, multiplayer, and unlimited scenario content are outside v0.2.0.
+Workers, automatic transport or harvesting, cashiers, obstacle pathfinding, navigation meshes, land expansion, more crops, animals, processing, recipes, multiple stores, customization, saves, IndexedDB, PWA installation, service workers, offline progression, audio, accounts, cloud synchronization, rankings, achievements, advertising, payments, external APIs, and multiplayer are outside v0.3.0.

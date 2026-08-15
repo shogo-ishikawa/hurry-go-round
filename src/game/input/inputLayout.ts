@@ -1,95 +1,43 @@
-import type { Point } from '../logic/movement';
-
-export interface ViewportSize {
+export interface Rect {
+  x: number;
+  y: number;
   width: number;
   height: number;
 }
-
-export interface ReservedSize {
-  width: number;
-  height: number;
+export interface InputLayout {
+  joystick: Rect;
+  inventoryHud: Rect;
+  economyHud: Rect;
+  tutorial: Rect;
 }
-
-export const INPUT_LAYOUT = {
-  joystickCenterX: 98,
-  joystickBottomMargin: 98,
-  joystickHitRadius: 92,
-  compactHudBreakpoint: 620,
-  hudWideWidth: 326,
-  hudWideHeight: 128,
-  hudCompactWidth: 248,
-  hudCompactHeight: 150,
-  tutorialWideY: 42,
-  tutorialCompactY: 178,
-  tutorialHeight: 76,
-  tutorialMaxWidth: 390,
-  bottomHintHeight: 78,
-} as const;
-
-export function shouldEnableVirtualJoystick(viewportWidth: number, maxTouchPoints: number): boolean {
-  return Number.isFinite(viewportWidth)
-    && viewportWidth > 0
-    && Number.isFinite(maxTouchPoints)
-    && maxTouchPoints >= 0;
-}
-
-export function isCompactHud(viewportWidth: number): boolean {
-  return viewportWidth < INPUT_LAYOUT.compactHudBreakpoint;
-}
-
-export function getHudReservedSize(viewportWidth: number): ReservedSize {
-  return isCompactHud(viewportWidth)
-    ? { width: INPUT_LAYOUT.hudCompactWidth, height: INPUT_LAYOUT.hudCompactHeight }
-    : { width: INPUT_LAYOUT.hudWideWidth, height: INPUT_LAYOUT.hudWideHeight };
-}
-
-export function getTutorialCenter(viewport: ViewportSize): Point {
+export function calculateInputLayout(
+  width: number,
+  height: number,
+): InputLayout {
+  const narrow = width < 520;
   return {
-    x: viewport.width / 2,
-    y: isCompactHud(viewport.width)
-      ? INPUT_LAYOUT.tutorialCompactY
-      : INPUT_LAYOUT.tutorialWideY,
+    joystick: { x: 16, y: Math.max(0, height - 168), width: 168, height: 168 },
+    inventoryHud: { x: 12, y: 12, width: narrow ? 174 : 225, height: 77 },
+    economyHud: {
+      x: narrow ? 12 : Math.max(12, width - 237),
+      y: narrow ? 96 : 12,
+      width: narrow ? 174 : 225,
+      height: 101,
+    },
+    tutorial: {
+      x: narrow ? 190 : 250,
+      y: 10,
+      width: Math.max(0, width - (narrow ? 202 : 500)),
+      height: 72,
+    },
   };
 }
-
-export function getJoystickCenter(viewportHeight: number): Point {
-  return {
-    x: INPUT_LAYOUT.joystickCenterX,
-    y: Math.max(76, viewportHeight - INPUT_LAYOUT.joystickBottomMargin),
-  };
-}
-
-export function isPointOverReservedUi(
-  point: Point,
-  viewport: ViewportSize,
-  joystickEnabled: boolean,
+export function isPointNavigationAllowed(
+  x: number,
+  y: number,
+  layout: InputLayout,
 ): boolean {
-  if (point.x < 0 || point.y < 0 || point.x > viewport.width || point.y > viewport.height) return true;
-
-  const hud = getHudReservedSize(viewport.width);
-  if (point.x <= hud.width && point.y <= hud.height) return true;
-
-  const tutorialCenter = getTutorialCenter(viewport);
-  const tutorialWidth = Math.min(
-    INPUT_LAYOUT.tutorialMaxWidth,
-    Math.max(0, viewport.width - 24),
+  return !Object.values(layout).some(
+    (r) => x >= r.x && x <= r.x + r.width && y >= r.y && y <= r.y + r.height,
   );
-  if (
-    Math.abs(point.y - tutorialCenter.y) <= INPUT_LAYOUT.tutorialHeight / 2
-    && Math.abs(point.x - tutorialCenter.x) <= tutorialWidth / 2
-  ) return true;
-
-  if (point.x >= viewport.width - 100 && point.y <= 64) return true;
-
-  if (
-    point.y >= viewport.height - INPUT_LAYOUT.bottomHintHeight
-    && Math.abs(point.x - viewport.width / 2) <= 260
-  ) return true;
-
-  if (joystickEnabled) {
-    const center = getJoystickCenter(viewport.height);
-    if (Math.hypot(point.x - center.x, point.y - center.y) <= INPUT_LAYOUT.joystickHitRadius) return true;
-  }
-
-  return false;
 }

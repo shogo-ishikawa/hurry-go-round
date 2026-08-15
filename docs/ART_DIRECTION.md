@@ -28,3 +28,7 @@ Motion should be short, soft, and purposeful: gentle idle breathing, modest walk
 ## Future replacement conventions
 
 Rendering and gameplay state remain separate. Replacement art should preserve each entity container’s bottom-center alignment, approximate dimensions, direction contract, and visual state names. Vite imports or local public assets are required; remote URLs, CDNs, external fonts, and copied third-party assets are not permitted.
+
+## Market additions
+
+Market structures reuse ochre wood, cream cloth, terracotta stripes, golden wheat, and teal interaction rings. Customers share the farmer's rounded proportions while four palette-driven clothing, hair, hat, and bag combinations keep the queue readable. Coins use warm gold with ochre outlines; empty shelf trays and queue rings remain visible at low opacity so capacity and flow stay legible.
