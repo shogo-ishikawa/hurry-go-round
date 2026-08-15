@@ -1,12 +1,17 @@
 import type { Inventory } from "../logic/inventory";
 import { GAME_CONFIG } from "../config/gameConfig";
-import { emptyResourceAmounts, RESOURCE_MARKET_CAPACITIES, type ResourceAmounts } from "../config/resourceDefinitions";
+import {
+  emptyResourceAmounts,
+  RESOURCE_MARKET_CAPACITIES,
+  type ResourceAmounts,
+} from "../config/resourceDefinitions";
 import { createCarriedCargo, type CarriedCargo } from "../logic/resources";
 import type { CarryCapacityLevel } from "../logic/carryUpgrade";
 import type { LandExpansionState } from "../logic/landExpansion";
 import type { LivestockInventory } from "../logic/livestock";
 import { createContractState } from "../logic/contracts";
 import type { ContractState } from "../contracts/contractTypes";
+
 export interface Economy {
   walletCoins: number;
   tillCoins: number;
@@ -16,6 +21,7 @@ export interface Economy {
   customersLeftWithoutPurchase?: number;
   contractCoinsEarned?: number;
 }
+
 export interface GameState {
   inventory: Inventory;
   cargo: CarriedCargo;
@@ -26,15 +32,47 @@ export interface GameState {
   landExpansion: LandExpansionState;
   livestock: LivestockInventory;
   economy: Economy;
-  upgrades: { harvestSpeedLevel: number; carryCapacityLevel: CarryCapacityLevel };
-  workers: {
-    harvestWorker: { hired: boolean; level: 0|1|2|3; carried: number; status: string };
-    transportWorker: { hired: boolean; level: 0|1|2|3; carried: number; status: string };
-    cornHarvestWorker: { hired: boolean; level: 0|1|2|3; carried: number; status: string };
-    cornTransportWorker: { hired: boolean; level: 0|1|2|3; carried: number; status: string };
-    poultryCaretaker: { hired: boolean; level: 0|1|2|3; resource: "corn" | "egg" | null; carried: number; status: string };
+  upgrades: {
+    harvestSpeedLevel: number;
+    carryCapacityLevel: CarryCapacityLevel;
   };
-  automation: { cornFieldCrate: number; cornFieldCrateCapacity: number };
+  workers: {
+    harvestWorker: {
+      hired: boolean;
+      level: 0 | 1 | 2 | 3;
+      carried: number;
+      status: string;
+    };
+    transportWorker: {
+      hired: boolean;
+      level: 0 | 1 | 2 | 3;
+      carried: number;
+      status: string;
+    };
+    cornHarvestWorker: {
+      hired: boolean;
+      level: 0 | 1 | 2 | 3;
+      carried: number;
+      status: string;
+    };
+    cornTransportWorker: {
+      hired: boolean;
+      level: 0 | 1 | 2 | 3;
+      carried: number;
+      status: string;
+    };
+    poultryCaretaker: {
+      hired: boolean;
+      level: 0 | 1 | 2 | 3;
+      resource: "corn" | "egg" | null;
+      carried: number;
+      status: string;
+    };
+  };
+  automation: {
+    cornFieldCrate: number;
+    cornFieldCrateCapacity: number;
+  };
   contracts: ContractState;
   harvestedTotal: number;
   deliveredOnce: boolean;
@@ -46,6 +84,7 @@ export interface GameState {
   firstTransportWorkerHired: boolean;
   firstAutomatedBarnDelivery: boolean;
 }
+
 export function createGameState(): GameState {
   return {
     inventory: {
@@ -62,8 +101,17 @@ export function createGameState(): GameState {
     market: emptyResourceAmounts(),
     marketCapacity: { ...RESOURCE_MARKET_CAPACITIES },
     soldByResource: emptyResourceAmounts(),
-    landExpansion: { eastCornFieldUnlocked: false, southChickenCoopUnlocked: false },
-    livestock: { feed: 0, feedCapacity: GAME_CONFIG.chickenFeedCapacity, eggs: 0, eggCapacity: GAME_CONFIG.eggStorageCapacity },
+    landExpansion: {
+      eastCornFieldUnlocked: false,
+      southChickenCoopUnlocked: false,
+      cornFieldLevel: 0,
+    },
+    livestock: {
+      feed: 0,
+      feedCapacity: GAME_CONFIG.chickenFeedCapacity,
+      eggs: 0,
+      eggCapacity: GAME_CONFIG.eggStorageCapacity,
+    },
     economy: {
       walletCoins: 0,
       tillCoins: 0,
@@ -75,13 +123,42 @@ export function createGameState(): GameState {
     },
     upgrades: { harvestSpeedLevel: 0, carryCapacityLevel: 0 },
     workers: {
-      harvestWorker: { hired: false, level:0, carried: 0, status: "未雇用" },
-      transportWorker: { hired: false, level:0, carried: 0, status: "未雇用" },
-      cornHarvestWorker: { hired: false, level:0, carried: 0, status: "未雇用" },
-      cornTransportWorker: { hired: false, level:0, carried: 0, status: "未雇用" },
-      poultryCaretaker: { hired: false, level:0, resource: null, carried: 0, status: "未雇用" },
+      harvestWorker: {
+        hired: false,
+        level: 0,
+        carried: 0,
+        status: "未雇用",
+      },
+      transportWorker: {
+        hired: false,
+        level: 0,
+        carried: 0,
+        status: "未雇用",
+      },
+      cornHarvestWorker: {
+        hired: false,
+        level: 0,
+        carried: 0,
+        status: "未雇用",
+      },
+      cornTransportWorker: {
+        hired: false,
+        level: 0,
+        carried: 0,
+        status: "未雇用",
+      },
+      poultryCaretaker: {
+        hired: false,
+        level: 0,
+        resource: null,
+        carried: 0,
+        status: "未雇用",
+      },
     },
-    automation: { cornFieldCrate: 0, cornFieldCrateCapacity: GAME_CONFIG.cornFieldCrateCapacity },
+    automation: {
+      cornFieldCrate: 0,
+      cornFieldCrateCapacity: GAME_CONFIG.cornFieldCrateCapacity,
+    },
     contracts: createContractState(),
     harvestedTotal: 0,
     deliveredOnce: false,
@@ -94,6 +171,7 @@ export function createGameState(): GameState {
     firstAutomatedBarnDelivery: false,
   };
 }
+
 export const GAME_EVENTS = {
   state: "game-state-changed",
   full: "capacity-full",
