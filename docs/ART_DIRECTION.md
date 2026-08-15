@@ -54,3 +54,7 @@ The farmer basket composes wheat, corn, and egg clusters at the same time, caps 
 ## v0.7.0 persistence and contracts
 
 The contract board uses roofed warm timber, pinned cream papers, and a restrained cooperative seal. The nearby shipping dock is a raised outlined platform with three bounded crate groups rather than unit-for-unit clutter. Title, pause, recovery, settings, and contract surfaces retain cream panels, warm outlines, teal actions, soft shadows, readable Japanese hierarchy, and static reduced-motion alternatives.
+
+## v0.8.0 operations and workforce
+
+The shared farm, east-field, poultry, and operations boards use the existing warm timber and cream-panel language. Hire pads combine a full-size outlined range with role text and equipment cues. Corn harvesters use field-green workwear and a hand tool, corn transporters use a broad yellow cart silhouette, and caretakers use a blue apron with a feed/egg carrier; role readability does not depend on color alone. Detailed costs, prerequisites, progress, and levels belong to contextual or camera-fixed panels rather than additional large world signs.

@@ -6,6 +6,7 @@ import { GAME_EVENTS, type GameState } from "../state/GameState";
 import type { Point } from "../logic/movement";
 import { palette as colors } from "../art/palette";
 import { getCarriedTotal } from "../logic/resources";
+import { WORKER_ROLE_IDS, WORKER_ROLES, getWorkerTrainingCost, type WorkerRoleId } from "../logic/workforce";
 let portraitNoticeShown = false;
 export class UIScene extends Phaser.Scene {
   private carriedText!: Phaser.GameObjects.Text;
@@ -28,6 +29,7 @@ export class UIScene extends Phaser.Scene {
   private livestockText!: Phaser.GameObjects.Text;
   private contextHint!: Phaser.GameObjects.Text;
   private contractButton!: Phaser.GameObjects.Text;
+  private operationsButton!:Phaser.GameObjects.Text;
   private pauseButton!: Phaser.GameObjects.Text;
   private saveStatus!: Phaser.GameObjects.Text;
   private overlay: Phaser.GameObjects.GameObject[] = [];
@@ -48,7 +50,7 @@ export class UIScene extends Phaser.Scene {
     this.marketText = this.add.text(0, 0, "売り場\n麦 0 / 8", style);
     this.tillText = this.add.text(0, 0, "売上  0", style);
     this.walletText = this.add.text(0, 0, "コイン  0", style);
-    this.versionText = this.add.text(0, 0, "v0.6.0", {
+    this.versionText = this.add.text(0, 0, "v0.8.0", {
       ...style,
       fontSize: "14px",
       color: "#755c49",
@@ -65,6 +67,7 @@ export class UIScene extends Phaser.Scene {
     this.livestockText = this.add.text(0, 0, "鶏小屋\n餌 0 / 12\n卵 0 / 12", { ...style, fontSize: "16px" }).setVisible(false);
     this.contextHint = this.add.text(0, 0, "", { fontFamily: "system-ui", fontSize: "16px", color: "#fff4d8", backgroundColor: "#49382ee8", align: "center", padding: { x: 14, y: 9 }, wordWrap: { width: 340 } }).setOrigin(.5).setAlpha(0);
     this.contractButton=this.add.text(0,0,"契約を見る  E",{...style,fontSize:"17px",backgroundColor:"#297c78",color:"#fff4d8",padding:{x:18,y:13}}).setOrigin(.5).setVisible(false).setInteractive({useHandCursor:true}).on("pointerup",()=>this.openContracts());
+    this.operationsButton=this.add.text(0,0,"農場運営所  E",{...style,fontSize:"17px",backgroundColor:"#297c78",color:"#fff4d8",padding:{x:18,y:13}}).setOrigin(.5).setVisible(false).setInteractive({useHandCursor:true}).on("pointerup",()=>this.openOperations());
     this.pauseButton=this.add.text(0,0,"一時停止",{...style,fontSize:"14px",backgroundColor:"#fff4d8",padding:{x:13,y:10}}).setOrigin(1,0).setInteractive({useHandCursor:true}).on("pointerup",()=>this.openPause());
     this.saveStatus=this.add.text(0,0,"変更なし",{...style,fontSize:"13px",backgroundColor:"#fff4d8cc",padding:{x:8,y:6}}).setOrigin(1,0);
     this.tutorial = this.add
@@ -104,6 +107,8 @@ export class UIScene extends Phaser.Scene {
     this.game.events.on(GAME_EVENTS.hint, this.showContextHint, this);
     this.game.events.on(GAME_EVENTS.contractRange, this.showContractButton, this);
     this.game.events.on(GAME_EVENTS.contractOpen, this.openContracts, this);
+    this.game.events.on(GAME_EVENTS.operationsRange,(visible:boolean)=>this.operationsButton.setVisible(visible&&!this.overlay.length));
+    this.game.events.on(GAME_EVENTS.operationsOpen,this.openOperations,this);
     this.game.events.on("save-status",this.updateSaveStatus,this);
     this.input.keyboard?.on("keydown-ESC",this.togglePause,this); this.input.keyboard?.on("keydown-P",this.togglePause,this);
     this.scale.on(Phaser.Scale.Events.RESIZE, this.layout, this);
@@ -123,6 +128,7 @@ export class UIScene extends Phaser.Scene {
     if(reward){const t=this.add.text(w/2,h/2-55,`基本報酬 ${reward.base}コイン\n早期達成ボーナス ${reward.bonus}コイン\n評判 +${reward.reputation}`,{fontFamily:"system-ui",fontSize:"21px",color:"#49382e",align:"center",lineSpacing:10}).setOrigin(.5);this.overlay.push(t);this.button(w/2,h/2+120,"閉じる",()=>this.closeOverlay());return;}
     const rep=this.add.text(w/2,Math.max(70,h/2-Math.min(h-24,700)/2+75),`評判 ${state.contracts.reputation.points}　完了 ${state.contracts.statistics.contractsCompleted}`,{fontFamily:"system-ui",fontSize:"17px",color:"#49382e"}).setOrigin(.5);this.overlay.push(rep);const compact=w<700;const top=compact?145:h/2-145;state.contracts.offers.forEach((offer,i)=>{const x=compact?w/2:w/2-300+i*300,y=compact?top+i*120:top;const req=Object.entries(offer.requirements).filter(([,n])=>n>0).map(([k,n])=>`${k==="wheat"?"麦":k==="corn"?"とうもろこし":"たまご"} ${n}`).join(" / ");const card=this.add.text(x,y,`${offer.type==="priority"?"優先依頼":"契約候補"}\n${req}\n基本報酬 ${offer.baseRewardCoins}`,{fontFamily:"system-ui",fontSize:compact?"14px":"16px",color:"#49382e",backgroundColor:"#eadbb9",padding:{x:12,y:10},align:"center"}).setOrigin(.5,0);this.overlay.push(card);this.button(x-42,y+88,"受注",()=>{this.game.events.emit(GAME_EVENTS.contractAction,"accept",offer.id);this.closeOverlay();});this.button(x+45,y+88,"見送る",()=>{this.game.events.emit(GAME_EVENTS.contractAction,"decline",offer.id);this.closeOverlay();});});if(state.contracts.active){const active=this.add.text(w/2,h-125,`進行中の契約　${Object.entries(state.contracts.active.requirements).filter(([,n])=>n>0).map(([k,n])=>`${k==="wheat"?"麦":k==="corn"?"とうもろこし":"たまご"} ${state.contracts.active!.delivered[k as "wheat"]}/${n}`).join("　")}`,{fontFamily:"system-ui",fontSize:"16px",color:"#49382e"}).setOrigin(.5);this.overlay.push(active);let cancellationArmed=false;const cancelButton=this.button(w/2,h-75,"契約を中止",()=>{if(!cancellationArmed){cancellationArmed=true;cancelButton.setText("契約を中止しますか？　もう一度押す");return;}this.game.events.emit(GAME_EVENTS.contractAction,"cancel");this.closeOverlay();});}this.button(w-80,55,"閉じる",()=>this.closeOverlay());};
   private openPause=():void=>{if(this.overlay.length)return;this.overlayBase("一時停止・管理");const w=this.scale.width,h=this.scale.height;["ゲームに戻る","今すぐ保存","出荷契約","設定","セーブデータを書き出す","セーブデータを読み込む","タイトルへ戻る","農場を最初からやり直す"].forEach((label,i)=>this.button(w/2,h/2-190+i*52,label,()=>{if(label==="ゲームに戻る")this.closeOverlay();else if(label==="出荷契約"){this.closeOverlay();this.openContracts();}else this.game.events.emit(`management-${label}`);}));};
+  private openOperations=():void=>{if(this.overlay.length||!this.lastState)return;this.overlayBase("農場運営所　スタッフ・施設");const state=this.lastState,w=this.scale.width,h=this.scale.height,keys:Record<WorkerRoleId,keyof GameState["workers"]>={"wheat-harvester":"harvestWorker","wheat-transporter":"transportWorker","corn-harvester":"cornHarvestWorker","corn-transporter":"cornTransportWorker","poultry-caretaker":"poultryCaretaker"};const summary=this.add.text(w/2,h/2-Math.min(h-24,700)/2+76,`コイン ${state.economy.walletCoins}　評判 ${state.contracts.reputation.points}\n契約 ${state.contracts.active?"進行中":"なし"}`,{fontFamily:"system-ui",fontSize:"16px",color:"#49382e",align:"center"}).setOrigin(.5,0);this.overlay.push(summary);const compact=h<600;WORKER_ROLE_IDS.forEach((role,index)=>{const worker=state.workers[keys[role]],definition=WORKER_ROLES[role],cost=worker.hired?getWorkerTrainingCost(role,worker.level):definition.hireCost,label=worker.hired?`Lv${worker.level}　${worker.status}`:"未雇用",x=w/2,y=(compact?130:170)+index*(compact?70:82);const card=this.add.text(x-80,y,`${definition.publicName}\n${label}　${cost===null?"最大レベル":`${cost}コイン`}`,{fontFamily:"system-ui",fontSize:compact?"13px":"15px",color:"#49382e",backgroundColor:"#eadbb9",padding:{x:12,y:8},fixedWidth:Math.min(500,w-150)}).setOrigin(.5);this.overlay.push(card);this.button(x+Math.min(270,w/2-55),y,worker.hired?(cost===null?"最大":"研修"):"雇用",()=>{if(cost!==null)this.game.events.emit(GAME_EVENTS.operationsAction,worker.hired?"train":"hire",role);this.closeOverlay();});});this.button(w-75,50,"閉じる",()=>this.closeOverlay());};
   private closeOverlay():void{for(const item of this.overlay)item.destroy();this.overlay=[];this.scene.resume("game");}
   getDirection(): Point {
     return this.joystick?.direction ?? { x: 0, y: 0 };
@@ -298,7 +304,7 @@ export class UIScene extends Phaser.Scene {
     this.moveHint.setPosition(w / 2, h - 28).setVisible(w >= 900);
     this.fullBadge.setPosition(w / 2, Math.min(135, h * 0.35));
     this.contextHint.setPosition(w / 2, Math.min(h - 190, Math.max(100, h * .2))).setWordWrapWidth(Math.max(160, Math.min(340, w - 32)));
-    this.contractButton.setPosition(w/2,h-85);this.pauseButton.setPosition(w-12,12);this.saveStatus.setPosition(w-105,12);
+    this.contractButton.setPosition(w/2,h-85);this.operationsButton.setPosition(w/2,h-140);this.pauseButton.setPosition(w-12,12);this.saveStatus.setPosition(w-105,12);
     this.joystick?.layout();
     this.joystick?.setEnabled(true);
     this.drawMeters();
@@ -330,7 +336,7 @@ export class UIScene extends Phaser.Scene {
     this.game.events.off(GAME_EVENTS.tutorial, this.updateTutorial, this);
     this.game.events.off(GAME_EVENTS.wallet, this.pulseWallet, this);
     this.game.events.off(GAME_EVENTS.hint, this.showContextHint, this);
-    this.game.events.off(GAME_EVENTS.contractRange, this.showContractButton, this);this.game.events.off(GAME_EVENTS.contractOpen,this.openContracts,this);this.game.events.off("save-status",this.updateSaveStatus,this);this.input.keyboard?.off("keydown-ESC",this.togglePause,this);this.input.keyboard?.off("keydown-P",this.togglePause,this);
+    this.game.events.off(GAME_EVENTS.contractRange, this.showContractButton, this);this.game.events.off(GAME_EVENTS.contractOpen,this.openContracts,this);this.game.events.off(GAME_EVENTS.operationsOpen,this.openOperations,this);this.game.events.off("save-status",this.updateSaveStatus,this);this.input.keyboard?.off("keydown-ESC",this.togglePause,this);this.input.keyboard?.off("keydown-P",this.togglePause,this);
     this.scale.off(Phaser.Scale.Events.RESIZE, this.layout, this);
   }
 }

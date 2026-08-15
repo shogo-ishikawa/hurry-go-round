@@ -14,7 +14,8 @@ export function validateSnapshot(value: unknown): ValidationResult<PersistedGame
   for (const n of [s.economy?.walletCoins,s.economy?.tillCoins,s.economy?.soldUnits,s.economy?.customersServed,s.economy?.customersLeftWithoutPurchase,s.playTimeMs,s.saveSequence]) if (!finiteNonNegative(n)) errors.push("invalid non-negative number");
   if (!Array.isArray(s.crops) || new Set(s.crops?.map(c => c.id)).size !== s.crops?.length || s.crops?.some(c => !c.id || !finiteNonNegative(c.remainingMs))) errors.push("invalid or duplicate crops");
   const contracts = s.contracts; if (!object(contracts) || !Array.isArray(contracts.offers)) errors.push("invalid contracts"); else for (const contract of [...contracts.offers, ...(contracts.active ? [contracts.active] : [])]) { if (RESOURCE_IDS.some(k => !finiteNonNegative(contract.requirements?.[k]) || !finiteNonNegative(contract.delivered?.[k]) || contract.delivered[k] > contract.requirements[k])) errors.push("invalid contract progress"); }
-  for (const worker of Object.values(s.workers ?? {})) if (!object(worker) || !finiteNonNegative(worker.carried) || worker.carried > 8) errors.push("invalid worker cargo");
+  for (const worker of Object.values(s.workers ?? {})) if (!object(worker) || !finiteNonNegative(worker.carried) || worker.carried > 12 || ![0,1,2,3].includes(worker.level) || worker.hired !== (worker.level > 0)) errors.push("invalid worker state");
+  if (!object(s.operations) || !(s.operations.lastSelectedFacilityId === null || typeof s.operations.lastSelectedFacilityId === "string") || typeof s.operations.compactAutomationHud !== "boolean" || !Array.isArray(s.operations.completedInteractionTutorials)) errors.push("invalid operations state");
   return errors.length ? { ok: false, errors: [...new Set(errors)] } : { ok: true, value: structuredClone(s), warnings: [] };
 }
 export async function validateEnvelope(value: unknown): Promise<ValidationResult<SaveEnvelope>> {
