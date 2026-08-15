@@ -31,12 +31,13 @@ describe("automation batching", () => {
     expect(getEggCollectionBatchAmount(4, 6)).toBe(4);
   });
 
-  it("waits briefly for a useful transport batch but never waits when full or empty", () => {
+  it("waits briefly for a useful transport batch", () => {
     expect(shouldDepartWithBatch(0, 8, 10, 900, 700)).toBe(false);
     expect(shouldDepartWithBatch(8, 8, 10, 0, 700)).toBe(true);
-    expect(shouldDepartWithBatch(3, 8, 0, 0, 700)).toBe(true);
-    expect(shouldDepartWithBatch(3, 8, 5, 699, 700)).toBe(false);
-    expect(shouldDepartWithBatch(3, 8, 5, 700, 700)).toBe(true);
+    expect(shouldDepartWithBatch(3, 8, 0, 0, 700)).toBe(false);
+    expect(shouldDepartWithBatch(3, 8, 0, 699, 700)).toBe(false);
+    expect(shouldDepartWithBatch(3, 8, 0, 700, 700)).toBe(true);
+    expect(shouldDepartWithBatch(3, 8, 5, 900, 700)).toBe(false);
   });
 
   it("reduces corn harvest interval after field expansion", () => {
