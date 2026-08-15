@@ -55,7 +55,12 @@ export function shouldDepartWithBatch(
   const carried = nonNegativeInteger(carriedAmount);
   if (carried <= 0) return false;
   if (carried >= nonNegativeInteger(capacity)) return true;
-  if (nonNegativeInteger(sourceRemaining) <= 0) return true;
+
+  // If more stock is already available, keep loading instead of departing.
+  if (nonNegativeInteger(sourceRemaining) > 0) return false;
+
+  // When production is momentarily empty, wait briefly so one long trip can
+  // carry a useful batch rather than a single item.
   return Math.max(0, waitedMs) >= Math.max(0, departureDelayMs);
 }
 
