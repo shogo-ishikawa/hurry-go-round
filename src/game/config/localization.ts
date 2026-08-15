@@ -16,5 +16,6 @@ export const UI_TEXT = {
     landLocked: "この土地はまだ購入されていません",
     eastRequired: "先に東の畑を購入してください",
     purchaseHint: "円内に立つと土地を購入できます",
+    customerAbandoned: "お客さんが購入をあきらめました",
   },
 } as const;

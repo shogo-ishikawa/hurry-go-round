@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { collectResourceOne, unloadCarriedResourceOne, type CarriedInventory } from "./resources";
-const empty = (capacity = 12): CarriedInventory => ({ resource: null, count: 0, capacity });
-describe("multi-resource carrying", () => {
-  it("collects one type without mixing and respects capacity", () => { const wheat = collectResourceOne(empty(), "wheat").value; expect(collectResourceOne(wheat, "corn")).toMatchObject({ changed: false, reason: "different-resource" }); expect(collectResourceOne({ resource: "wheat", count: 12, capacity: 12 }, "wheat").changed).toBe(false); });
-  it("clears the resource after unloading the last item", () => { const result = unloadCarriedResourceOne({ resource: "egg", count: 1, capacity: 18 }, { wheat: 2, corn: 3, egg: 4 }); expect(result.carried).toEqual({ resource: null, count: 0, capacity: 18 }); expect(result.barn.egg).toBe(5); });
+import { addCargoOne, createCarriedCargo, getCarriedTotal, removeCargoOne, unloadNextCargoOne } from "./resources";
+describe("mixed cargo", () => {
+  it("coexists and shares capacity", () => { let cargo=createCarriedCargo(12); cargo=addCargoOne(cargo,"wheat").cargo; cargo=addCargoOne(cargo,"corn").cargo; cargo=addCargoOne(cargo,"egg").cargo; expect(cargo.amounts).toEqual({wheat:1,corn:1,egg:1}); expect(getCarriedTotal(cargo)).toBe(3); });
+  it("preserves unrelated resources and unloads round-robin",()=>{ const cargo={amounts:{wheat:2,corn:1,egg:1},capacity:12}; expect(removeCargoOne(cargo,"corn").cargo.amounts).toEqual({wheat:2,corn:0,egg:1}); const first=unloadNextCargoOne(cargo,{wheat:0,corn:0,egg:0},"wheat"); expect(first.resource).toBe("corn"); const second=unloadNextCargoOne(first.cargo,first.destination,first.resource); expect(second.resource).toBe("egg"); });
+  it("supports every upgrade capacity without overflow",()=>{for(const capacity of [12,18,24]){let cargo=createCarriedCargo(capacity);for(let i=0;i<capacity+1;i++)cargo=addCargoOne(cargo,"wheat").cargo;expect(getCarriedTotal(cargo)).toBe(capacity);}});
 });

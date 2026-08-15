@@ -3,7 +3,7 @@ import { createFarmWorld } from "../art/terrain";
 import { harvestEffect, transferEffect } from "../art/effects";
 import { calculateCameraZoom } from "../logic/camera";
 import { moveWithinBounds, type Point } from "../logic/movement";
-import { collectResourceOne, unloadCarriedResourceOne } from "../logic/resources";
+import { addCargoOne, getCarriedTotal, unloadNextCargoOne } from "../logic/resources";
 import { getContinuousDragDirection } from "../logic/pointerNavigation";
 import { getHarvestIntervalForLevel } from "../logic/upgrades";
 import {
@@ -24,6 +24,7 @@ import { WorkerSystem } from "../systems/WorkerSystem";
 import { HiringSystem } from "../systems/HiringSystem";
 import { ExpansionSystem } from "../systems/ExpansionSystem";
 import { UIScene } from "./UIScene";
+import { ExpandedAutomationSystem } from "../systems/ExpandedAutomationSystem";
 export class GameScene extends Phaser.Scene {
   private farmer!: Farmer;
   private crops: CropNode[] = [];
@@ -35,6 +36,7 @@ export class GameScene extends Phaser.Scene {
   private state: GameState = createGameState();
   private harvestCooldown = 0;
   private unloadCooldown = 0;
+  private lastUnloadedResource: "wheat" | "corn" | "egg" | null = null;
   private fullNotified = false;
   private tutorialStage = 0;
   private ui?: UIScene;
@@ -43,6 +45,7 @@ export class GameScene extends Phaser.Scene {
   private workers!: WorkerSystem;
   private hiring!: HiringSystem;
   private expansion!: ExpansionSystem;
+  private expandedAutomation!: ExpandedAutomationSystem;
   private pointTarget: Phaser.Math.Vector2 | null = null;
   private dragStart: Point | null = null;
   private dragDirection: Point = { x: 0, y: 0 };
@@ -103,6 +106,7 @@ export class GameScene extends Phaser.Scene {
       (stage) => this.setTutorial(stage),
     );
     this.expansion = new ExpansionSystem(this, this.farmer, () => this.state, (s) => this.setState(s));
+    this.expandedAutomation = new ExpandedAutomationSystem(this, this.farmer, () => this.state, (s) => this.setState(s));
     this.scene.launch("ui");
     this.time.delayedCall(0, () => {
       this.ui = this.scene.get("ui") as UIScene;
@@ -146,6 +150,7 @@ export class GameScene extends Phaser.Scene {
     this.hiring.update(delta);
     this.workers.update(delta);
     this.expansion.update(delta);
+    this.expandedAutomation.update(delta);
   }
   private createCrops(): void {
     const positions: Array<[number, number]> = [];
@@ -223,7 +228,7 @@ export class GameScene extends Phaser.Scene {
   }
   private tryHarvest(): void {
     if (this.harvestCooldown > 0) return;
-    if (this.state.carriedInventory.count >= this.state.carriedInventory.capacity) {
+    if (getCarriedTotal(this.state.cargo) >= this.state.cargo.capacity) {
       if (!this.fullNotified && this.nearestReadyCrop()) {
         this.fullNotified = true;
         this.game.events.emit(GAME_EVENTS.full);
@@ -233,9 +238,8 @@ export class GameScene extends Phaser.Scene {
     }
     const crop = this.nearestReadyCrop();
     if (!crop) return;
-    const collected = collectResourceOne(this.state.carriedInventory, "wheat");
+    const collected = addCargoOne(this.state.cargo, "wheat");
     if (!collected.changed) {
-      if (collected.reason === "different-resource") this.game.events.emit(GAME_EVENTS.hint, "背負い籠には別の商品が入っています\n先に倉庫へ納品してください");
       return;
     }
     if (!crop.harvest()) return;
@@ -244,21 +248,20 @@ export class GameScene extends Phaser.Scene {
     );
     this.state = {
       ...this.state,
-      carriedInventory: collected.value,
-      inventory: { ...this.state.inventory, carried: collected.value.count, capacity: collected.value.capacity },
+      cargo: collected.cargo,
       harvestedTotal: this.state.harvestedTotal + 1,
     };
     this.farmer.setFacingFromVector(
       crop.x - this.farmer.x,
       crop.y - this.farmer.y,
     );
-    this.farmer.setCarried(collected.value.count, "wheat");
+    this.farmer.setCargo(collected.cargo.amounts, collected.cargo.capacity);
     this.farmer.playHarvestMotion();
     harvestEffect(this, crop.x, crop.y);
     this.emitState();
     if (this.state.harvestedTotal === 1) this.setTutorial(1);
-    if (collected.value.count >= 9) this.setTutorial(2);
-    if (collected.value.count === collected.value.capacity) {
+    if (getCarriedTotal(collected.cargo) >= 9) this.setTutorial(2);
+    if (getCarriedTotal(collected.cargo) === collected.cargo.capacity) {
       this.fullNotified = true;
       this.game.events.emit(GAME_EVENTS.full);
     }
@@ -292,17 +295,16 @@ export class GameScene extends Phaser.Scene {
     if (
       !inZone ||
       this.unloadCooldown > 0 ||
-      this.state.carriedInventory.count === 0
+      getCarriedTotal(this.state.cargo) === 0
     )
       return;
-    const result = unloadCarriedResourceOne(this.state.carriedInventory, this.state.barn);
+    const result = unloadNextCargoOne(this.state.cargo, this.state.barn, this.lastUnloadedResource);
     if (!result.changed) return;
-    const legacyBarn = result.carried.resource === "wheat" || this.state.carriedInventory.resource === "wheat" ? result.barn.wheat : this.state.inventory.barn;
-    const inventory = { ...this.state.inventory, carried: result.carried.count, barn: legacyBarn };
-    this.state = { ...this.state, carriedInventory: result.carried, barn: result.barn, inventory, deliveredOnce: true };
+    this.lastUnloadedResource = result.resource;
+    this.state = { ...this.state, cargo: result.cargo, barn: result.destination, deliveredOnce: true };
     this.unloadCooldown = GAME_CONFIG.unloadIntervalMs;
     this.fullNotified = false;
-    this.farmer.setCarried(result.carried.count, result.carried.resource);
+    this.farmer.setCargo(result.cargo.amounts, result.cargo.capacity);
     transferEffect(this, this.farmer.x, this.farmer.y, 1520, 480);
     this.emitState();
     this.setTutorial(3);
@@ -310,11 +312,7 @@ export class GameScene extends Phaser.Scene {
   private setState(state: GameState): void {
     const walletGrew =
       state.economy.walletCoins > this.state.economy.walletCoins;
-    const barn = state.inventory.barn !== this.state.inventory.barn ? { ...state.barn, wheat: state.inventory.barn } : state.barn;
-    const carriedInventory = state.inventory.carried !== this.state.inventory.carried && (this.state.carriedInventory.resource === null || this.state.carriedInventory.resource === "wheat")
-      ? { ...state.carriedInventory, resource: state.inventory.carried > 0 ? "wheat" as const : null, count: state.inventory.carried }
-      : state.carriedInventory;
-    this.state = { ...state, barn, carriedInventory };
+    this.state = state;
     if (
       (state.economy.walletCoins >= GAME_CONFIG.harvestWorkerHireCost ||
         state.firstUpgradePurchased) &&

@@ -4,8 +4,8 @@ import { VirtualJoystick } from "../input/VirtualJoystick";
 import { calculateInputLayout } from "../input/inputLayout";
 import { GAME_EVENTS, type GameState } from "../state/GameState";
 import type { Point } from "../logic/movement";
-import { UI_TEXT } from "../config/localization";
 import { palette as colors } from "../art/palette";
+import { getCarriedTotal } from "../logic/resources";
 let portraitNoticeShown = false;
 export class UIScene extends Phaser.Scene {
   private carriedText!: Phaser.GameObjects.Text;
@@ -44,7 +44,7 @@ export class UIScene extends Phaser.Scene {
     this.marketText = this.add.text(0, 0, "売り場\n麦 0 / 8", style);
     this.tillText = this.add.text(0, 0, "売上  0", style);
     this.walletText = this.add.text(0, 0, "コイン  0", style);
-    this.versionText = this.add.text(0, 0, "v0.5.0", {
+    this.versionText = this.add.text(0, 0, "v0.6.0", {
       ...style,
       fontSize: "14px",
       color: "#755c49",
@@ -112,12 +112,12 @@ export class UIScene extends Phaser.Scene {
   }
   private updateState(state: GameState): void {
     this.lastState = state;
-    const carried = state.carriedInventory;
-    this.carriedText.setText(carried.resource ? `背負い籠\n${UI_TEXT.resources[carried.resource]}  ${carried.count} / ${carried.capacity}` : "背負い籠\n空");
+    const carried = state.cargo; const total = getCarriedTotal(carried);
+    this.carriedText.setText(total ? `背負い籠　${total} / ${carried.capacity}\n麦${carried.amounts.wheat}　とう${carried.amounts.corn}　卵${carried.amounts.egg}` : `背負い籠\n空　0 / ${carried.capacity}`);
     const unlocked = state.landExpansion;
     this.barnText.setText(["倉庫", `麦 ${state.barn.wheat}`, unlocked.eastCornFieldUnlocked ? `とうもろこし ${state.barn.corn}` : "", unlocked.southChickenCoopUnlocked ? `たまご ${state.barn.egg}` : ""].filter(Boolean).join("\n"));
     this.marketText.setText(["売り場", `麦 ${state.market.wheat} / 8`, unlocked.eastCornFieldUnlocked ? `とうもろこし ${state.market.corn} / 8` : "", unlocked.southChickenCoopUnlocked ? `たまご ${state.market.egg} / 8` : ""].filter(Boolean).join("\n"));
-    this.livestockText.setVisible(unlocked.southChickenCoopUnlocked).setText(`鶏小屋\n餌 ${state.livestock.feed} / ${state.livestock.feedCapacity}\n卵 ${state.livestock.eggs} / ${state.livestock.eggCapacity}`);
+    this.livestockText.setVisible(unlocked.southChickenCoopUnlocked).setText(`鶏小屋\n餌 ${state.livestock.feed} / ${state.livestock.feedCapacity}　卵 ${state.livestock.eggs} / ${state.livestock.eggCapacity}\n飼育 ${state.workers.poultryCaretaker.status}`);
     this.tillText.setText(`売上  ${state.economy.tillCoins}`);
     this.walletText.setText(`コイン  ${state.economy.walletCoins}`);
     const compact = this.scale.width < 520;
@@ -133,18 +133,17 @@ export class UIScene extends Phaser.Scene {
     this.drawMeters();
   }
   private drawMeters(): void {
-    const count = this.lastState?.carriedInventory.count ?? 0;
-    const capacity = this.lastState?.carriedInventory.capacity ?? 12;
+    const cargo = this.lastState?.cargo;
+    const count = cargo ? getCarriedTotal(cargo) : 0;
+    const capacity = cargo?.capacity ?? 12;
     const layout = calculateInputLayout(this.scale.width, this.scale.height);
     const g = this.meters.clear();
-    const resource = this.lastState?.carriedInventory.resource;
-    const fill = resource === "corn" ? 0xf2c84b : resource === "egg" ? colors.cream : colors.wheat;
     const columns = this.scale.width < 520 ? 12 : 12;
     for (let i = 0; i < capacity; i++) {
       const x = layout.inventoryHud.x + 15 + (i % columns) * 12;
       const y = layout.inventoryHud.y + 66 + Math.floor(i / columns) * 10;
       g.lineStyle(1, palette.outline, 0.5)
-        .fillStyle(i < count ? fill : palette.creamDark, 0.9)
+        .fillStyle(i < count ? (i < (cargo?.amounts.wheat ?? 0) ? colors.wheat : i < (cargo?.amounts.wheat ?? 0) + (cargo?.amounts.corn ?? 0) ? 0xf2c84b : colors.cream) : palette.creamDark, 0.9)
         .fillRoundedRect(x, y, 9, 7, 2).strokeRoundedRect(x, y, 9, 7, 2);
     }
   }

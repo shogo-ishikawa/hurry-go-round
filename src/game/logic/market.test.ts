@@ -15,7 +15,7 @@ const state = (market = 2): SaleState => ({
     tillCoins: 1,
     wheatUnitPrice: 2,
     soldUnits: 0,
-    customersServed: 0,
+    customersServed: 0, customersLeftWithoutPurchase: 0,
   },
 });
 describe("sale transaction", () => {

@@ -1,4 +1,4 @@
-export type CustomerPhase = "entering" | "queueing" | "buying" | "leaving";
+export type CustomerPhase = "entering" | "queueing" | "buying" | "waiting-stock" | "leaving" | "leaving-disappointed";
 export interface QueueCustomer {
   id: number;
   phase: CustomerPhase;
