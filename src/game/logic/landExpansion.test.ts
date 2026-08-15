@@ -1,0 +1,4 @@
+import { describe, expect, it } from "vitest";
+import { purchaseLandExpansion } from "./landExpansion";
+const locked = { eastCornFieldUnlocked: false, southChickenCoopUnlocked: false };
+describe("land expansion", () => { it("charges 120 for east without double purchase", () => { const r = purchaseLandExpansion("eastCornField", 200, locked); expect(r).toMatchObject({ walletCoins: 80, purchased: true }); expect(purchaseLandExpansion("eastCornField", 80, r.land).purchased).toBe(false); }); it("requires east and charges 240 for south", () => { expect(purchaseLandExpansion("southChickenCoop", 500, locked).reason).toBe("prerequisite"); const r = purchaseLandExpansion("southChickenCoop", 300, { ...locked, eastCornFieldUnlocked: true }); expect(r).toMatchObject({ walletCoins: 60, purchased: true }); }); it("does not charge insufficient funds", () => expect(purchaseLandExpansion("eastCornField", 119, locked).walletCoins).toBe(119)); });

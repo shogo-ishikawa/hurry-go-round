@@ -1,6 +1,8 @@
 import Phaser from "phaser";
 import { palette } from "./palette";
 import { GAME_CONFIG } from "../config/gameConfig";
+import { WorldSign } from "../entities/WorldSign";
+import { UI_TEXT } from "../config/localization";
 
 function tree(scene: Phaser.Scene, x: number, y: number, scale = 1): void {
   const c = scene.add.container(x, y).setDepth(y + 70);
@@ -41,6 +43,22 @@ export function createFarmWorld(scene: Phaser.Scene): void {
     GAME_CONFIG.worldWidth,
     GAME_CONFIG.worldHeight,
   );
+  // v0.5.0 expansion parcels extend the established farm east and south.
+  g.fillStyle(palette.pathLight, 0.55).fillRoundedRect(2040, 160, 900, 900, 38);
+  g.fillStyle(palette.soil).fillRoundedRect(2230, 260, 620, 650, 28);
+  g.lineStyle(5, palette.soilDark, 0.45);
+  for (let y = 315; y < 900; y += 125) g.lineBetween(2260, y, 2820, y);
+  g.fillStyle(palette.pathLight, 0.55).fillRoundedRect(620, 1380, 1040, 470, 38);
+  g.fillStyle(palette.creamDark, 0.65).fillRoundedRect(690, 1460, 900, 330, 28);
+  g.fillStyle(palette.barn).fillRoundedRect(720, 1480, 260, 210, 20).lineStyle(6, palette.outline).strokeRoundedRect(720, 1480, 260, 210, 20);
+  g.fillStyle(palette.barnDark).fillTriangle(690, 1510, 850, 1385, 1010, 1510).strokeTriangle(690, 1510, 850, 1385, 1010, 1510);
+  g.fillStyle(palette.outline).fillRoundedRect(805, 1580, 90, 110, 12);
+  // Water and feed/egg fixtures use icons and shapes rather than ground labels.
+  g.fillStyle(palette.water).fillEllipse(1260, 1740, 95, 45).lineStyle(4, palette.outline).strokeEllipse(1260, 1740, 95, 45);
+  g.fillStyle(palette.path).fillRoundedRect(930, 1580, 100, 58, 8).strokeRoundedRect(930, 1580, 100, 58, 8);
+  g.fillStyle(palette.wheat).fillEllipse(980, 1595, 70, 20);
+  g.fillStyle(palette.path).fillRoundedRect(1340, 1580, 100, 70, 8).strokeRoundedRect(1340, 1580, 100, 70, 8);
+  for (let i = 0; i < 6; i++) g.fillStyle(palette.cream).fillEllipse(1360 + (i % 3) * 30, 1598 + Math.floor(i / 3) * 26, 17, 22);
   // grass variation
   g.fillStyle(palette.grassLight, 0.28);
   for (let y = 35; y < GAME_CONFIG.worldHeight; y += 95)
@@ -151,14 +169,9 @@ export function createFarmWorld(scene: Phaser.Scene): void {
     .fillRoundedRect(1260, 610, 150, 55, 10)
     .lineStyle(4, palette.outline)
     .strokeRoundedRect(1260, 610, 150, 55, 10);
-  scene.add
-    .text(1280, 625, "納品", {
-      fontFamily: "system-ui",
-      fontSize: "20px",
-      color: "#49382e",
-      fontStyle: "bold",
-    })
-    .setDepth(650);
+  new WorldSign(scene, 1330, 620, [UI_TEXT.facilities.delivery]);
+  new WorldSign(scene, 1740, 610, [UI_TEXT.facilities.market]);
+  new WorldSign(scene, 1840, 720, [UI_TEXT.facilities.cash]);
   // Market queue, cash collection, and entrance/exit guidance.
   g.lineStyle(4, palette.cream, 0.65);
   for (const y of [830, 920, 1010, 1100]) g.strokeCircle(1590, y, 31);

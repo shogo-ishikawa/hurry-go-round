@@ -36,3 +36,12 @@ Market structures reuse ochre wood, cream cloth, terracotta stripes, golden whea
 ## Automation additions
 
 The harvest worker uses olive headwear and warm work clothes; the transport worker uses blue workwear and a readable two-wheel carrier. Their silhouettes, cargo, and Japanese status plaques remain distinct from the teal-overall farmer. The collection crate uses sixteen small physical shelf positions, and hiring/pickup rings appear only on interactive areas. Worker routes follow authored farm waypoints rather than general pathfinding.
+
+## v0.5.0 expansion and livestock
+
+- Corn is taller than wheat, with deep-green stalks and leaves, bright yellow ears, and clearly shorter harvested/growing silhouettes.
+- The three chickens use rounded cream, light-brown, and brown bodies, small outlined legs, combs, beaks, soft shadows, and restrained walking bob.
+- The south parcel uses warm timber, terracotta coop walls, straw-colored ground, a dark doorway, trough, egg crate, fence, and water fixture.
+- Resource cargo stays readable at 12, 18, and 24 capacity: wheat bundles, yellow/green corn, and cream eggs in compact crate rows are visually distinct.
+- Facility copy belongs to reusable timber signs, mounted plates, bubbles, or camera-fixed panels. Interaction floors use rings and pictograms only; ordinary scenery never receives an interaction circle.
+- Locked parcels use muted ground, timber gates and a drawn lock. Unlocking removes the gate rather than leaving a debug boundary visible.

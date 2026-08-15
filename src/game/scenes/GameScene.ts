@@ -3,7 +3,8 @@ import { createFarmWorld } from "../art/terrain";
 import { harvestEffect, transferEffect } from "../art/effects";
 import { calculateCameraZoom } from "../logic/camera";
 import { moveWithinBounds, type Point } from "../logic/movement";
-import { harvestOne, unloadOne } from "../logic/inventory";
+import { collectResourceOne, unloadCarriedResourceOne } from "../logic/resources";
+import { getContinuousDragDirection } from "../logic/pointerNavigation";
 import { getHarvestIntervalForLevel } from "../logic/upgrades";
 import {
   calculateInputLayout,
@@ -21,6 +22,7 @@ import { MarketSystem } from "../systems/MarketSystem";
 import { UpgradeSystem } from "../systems/UpgradeSystem";
 import { WorkerSystem } from "../systems/WorkerSystem";
 import { HiringSystem } from "../systems/HiringSystem";
+import { ExpansionSystem } from "../systems/ExpansionSystem";
 import { UIScene } from "./UIScene";
 export class GameScene extends Phaser.Scene {
   private farmer!: Farmer;
@@ -40,7 +42,11 @@ export class GameScene extends Phaser.Scene {
   private upgrades!: UpgradeSystem;
   private workers!: WorkerSystem;
   private hiring!: HiringSystem;
+  private expansion!: ExpansionSystem;
   private pointTarget: Phaser.Math.Vector2 | null = null;
+  private dragStart: Point | null = null;
+  private dragDirection: Point = { x: 0, y: 0 };
+  private dragging = false;
   private destinationMarker!: Phaser.GameObjects.Arc;
   constructor() {
     super("game");
@@ -96,13 +102,15 @@ export class GameScene extends Phaser.Scene {
       (s) => this.setState(s),
       (stage) => this.setTutorial(stage),
     );
+    this.expansion = new ExpansionSystem(this, this.farmer, () => this.state, (s) => this.setState(s));
     this.scene.launch("ui");
     this.time.delayedCall(0, () => {
       this.ui = this.scene.get("ui") as UIScene;
       this.emitState();
     });
-    this.input.on("pointerdown", this.setPointTarget, this);
-    this.input.on("pointermove", this.retargetPoint, this);
+    this.input.on("pointerdown", this.beginPointer, this);
+    this.input.on("pointermove", this.updatePointerDrag, this);
+    this.input.on("pointerup", this.endPointer, this);
     this.scale.on(Phaser.Scale.Events.RESIZE, this.handleResize, this);
     this.game.events.on(Phaser.Core.Events.BLUR, this.clearInput, this);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, this.cleanup, this);
@@ -124,7 +132,9 @@ export class GameScene extends Phaser.Scene {
         inset: GAME_CONFIG.playerInset,
       },
     );
-    this.farmer.setPosition(next.x, next.y);
+    const constrained = this.expansion.constrainPosition(next.x, next.y);
+    this.farmer.setPosition(constrained.x, constrained.y);
+    if (constrained.blocked) this.cancelPointTarget();
     this.farmer.animate(delta, moving);
     for (const crop of this.crops) crop.tick(delta, time);
     this.harvestCooldown = Math.max(0, this.harvestCooldown - delta);
@@ -135,6 +145,7 @@ export class GameScene extends Phaser.Scene {
     this.upgrades.update(delta);
     this.hiring.update(delta);
     this.workers.update(delta);
+    this.expansion.update(delta);
   }
   private createCrops(): void {
     const positions: Array<[number, number]> = [];
@@ -164,6 +175,7 @@ export class GameScene extends Phaser.Scene {
       this.cancelPointTarget();
       return keyboard.x || keyboard.y ? keyboard : joystick;
     }
+    if (this.dragging) return this.dragDirection;
     if (!this.pointTarget) return { x: 0, y: 0 };
     const dx = this.pointTarget.x - this.farmer.x,
       dy = this.pointTarget.y - this.farmer.y;
@@ -183,11 +195,27 @@ export class GameScene extends Phaser.Scene {
     )
       return;
     const world = this.cameras.main.getWorldPoint(pointer.x, pointer.y);
+    if (this.expansion.isLockedPoint(world.x, world.y)) {
+      this.game.events.emit(GAME_EVENTS.hint, "この土地はまだ購入されていません");
+      return;
+    }
     this.pointTarget = new Phaser.Math.Vector2(world.x, world.y);
     this.destinationMarker.setPosition(world.x, world.y).setVisible(true);
   }
-  private retargetPoint(pointer: Phaser.Input.Pointer): void {
-    if (pointer.isDown && this.pointTarget) this.setPointTarget(pointer);
+  private beginPointer(pointer: Phaser.Input.Pointer): void {
+    if (!isPointNavigationAllowed(pointer.x, pointer.y, calculateInputLayout(this.scale.width, this.scale.height))) return;
+    this.dragStart = { x: pointer.x, y: pointer.y }; this.dragDirection = { x: 0, y: 0 }; this.dragging = false;
+  }
+  private updatePointerDrag(pointer: Phaser.Input.Pointer): void {
+    if (!pointer.isDown || !this.dragStart) return;
+    const direction = getContinuousDragDirection(this.dragStart, { x: pointer.x, y: pointer.y });
+    this.dragDirection = direction;
+    if (direction.x || direction.y) { this.dragging = true; this.cancelPointTarget(); }
+  }
+  private endPointer(pointer: Phaser.Input.Pointer): void {
+    if (!this.dragStart) return; const wasDragging = this.dragging;
+    this.dragStart = null; this.dragging = false; this.dragDirection = { x: 0, y: 0 };
+    if (wasDragging) this.cancelPointTarget(); else this.setPointTarget(pointer);
   }
   private cancelPointTarget(): void {
     this.pointTarget = null;
@@ -195,7 +223,7 @@ export class GameScene extends Phaser.Scene {
   }
   private tryHarvest(): void {
     if (this.harvestCooldown > 0) return;
-    if (this.state.inventory.carried >= this.state.inventory.capacity) {
+    if (this.state.carriedInventory.count >= this.state.carriedInventory.capacity) {
       if (!this.fullNotified && this.nearestReadyCrop()) {
         this.fullNotified = true;
         this.game.events.emit(GAME_EVENTS.full);
@@ -204,26 +232,33 @@ export class GameScene extends Phaser.Scene {
       return;
     }
     const crop = this.nearestReadyCrop();
-    if (!crop || !crop.harvest()) return;
+    if (!crop) return;
+    const collected = collectResourceOne(this.state.carriedInventory, "wheat");
+    if (!collected.changed) {
+      if (collected.reason === "different-resource") this.game.events.emit(GAME_EVENTS.hint, "背負い籠には別の商品が入っています\n先に倉庫へ納品してください");
+      return;
+    }
+    if (!crop.harvest()) return;
     this.harvestCooldown = getHarvestIntervalForLevel(
       this.state.upgrades.harvestSpeedLevel,
     );
     this.state = {
       ...this.state,
-      inventory: harvestOne(this.state.inventory),
+      carriedInventory: collected.value,
+      inventory: { ...this.state.inventory, carried: collected.value.count, capacity: collected.value.capacity },
       harvestedTotal: this.state.harvestedTotal + 1,
     };
     this.farmer.setFacingFromVector(
       crop.x - this.farmer.x,
       crop.y - this.farmer.y,
     );
-    this.farmer.setCarried(this.state.inventory.carried);
+    this.farmer.setCarried(collected.value.count, "wheat");
     this.farmer.playHarvestMotion();
     harvestEffect(this, crop.x, crop.y);
     this.emitState();
     if (this.state.harvestedTotal === 1) this.setTutorial(1);
-    if (this.state.inventory.carried >= 9) this.setTutorial(2);
-    if (this.state.inventory.carried === this.state.inventory.capacity) {
+    if (collected.value.count >= 9) this.setTutorial(2);
+    if (collected.value.count === collected.value.capacity) {
       this.fullNotified = true;
       this.game.events.emit(GAME_EVENTS.full);
     }
@@ -257,15 +292,17 @@ export class GameScene extends Phaser.Scene {
     if (
       !inZone ||
       this.unloadCooldown > 0 ||
-      this.state.inventory.carried === 0
+      this.state.carriedInventory.count === 0
     )
       return;
-    const inventory = unloadOne(this.state.inventory);
-    if (inventory === this.state.inventory) return;
-    this.state = { ...this.state, inventory, deliveredOnce: true };
+    const result = unloadCarriedResourceOne(this.state.carriedInventory, this.state.barn);
+    if (!result.changed) return;
+    const legacyBarn = result.carried.resource === "wheat" || this.state.carriedInventory.resource === "wheat" ? result.barn.wheat : this.state.inventory.barn;
+    const inventory = { ...this.state.inventory, carried: result.carried.count, barn: legacyBarn };
+    this.state = { ...this.state, carriedInventory: result.carried, barn: result.barn, inventory, deliveredOnce: true };
     this.unloadCooldown = GAME_CONFIG.unloadIntervalMs;
     this.fullNotified = false;
-    this.farmer.setCarried(inventory.carried);
+    this.farmer.setCarried(result.carried.count, result.carried.resource);
     transferEffect(this, this.farmer.x, this.farmer.y, 1520, 480);
     this.emitState();
     this.setTutorial(3);
@@ -273,7 +310,11 @@ export class GameScene extends Phaser.Scene {
   private setState(state: GameState): void {
     const walletGrew =
       state.economy.walletCoins > this.state.economy.walletCoins;
-    this.state = state;
+    const barn = state.inventory.barn !== this.state.inventory.barn ? { ...state.barn, wheat: state.inventory.barn } : state.barn;
+    const carriedInventory = state.inventory.carried !== this.state.inventory.carried && (this.state.carriedInventory.resource === null || this.state.carriedInventory.resource === "wheat")
+      ? { ...state.carriedInventory, resource: state.inventory.carried > 0 ? "wheat" as const : null, count: state.inventory.carried }
+      : state.carriedInventory;
+    this.state = { ...state, barn, carriedInventory };
     if (
       (state.economy.walletCoins >= GAME_CONFIG.harvestWorkerHireCost ||
         state.firstUpgradePurchased) &&
@@ -303,11 +344,13 @@ export class GameScene extends Phaser.Scene {
   }
   private clearInput(): void {
     this.ui?.resetInput();
+    this.dragStart = null; this.dragging = false; this.dragDirection = { x: 0, y: 0 };
     this.cancelPointTarget();
   }
   private cleanup(): void {
-    this.input.off("pointerdown", this.setPointTarget, this);
-    this.input.off("pointermove", this.retargetPoint, this);
+    this.input.off("pointerdown", this.beginPointer, this);
+    this.input.off("pointermove", this.updatePointerDrag, this);
+    this.input.off("pointerup", this.endPointer, this);
     this.scale.off(Phaser.Scale.Events.RESIZE, this.handleResize, this);
     this.game.events.off(Phaser.Core.Events.BLUR, this.clearInput, this);
   }
