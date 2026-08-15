@@ -3,8 +3,8 @@ import { GAME_CONFIG } from "../config/gameConfig";
 import { Customer } from "../entities/Customer";
 import { MarketStall } from "../entities/MarketStall";
 import { collectTillCoin } from "../logic/economy";
-import { restockMarketOne } from "../logic/inventory";
-import { sellWheatToCustomer } from "../logic/market";
+import { getUnlockedCustomerResources, restockMarketResourceOne, sellRequestedResource } from "../logic/multiResourceMarket";
+import { RESOURCE_IDS, type ResourceId } from "../config/resourceDefinitions";
 import { canFrontBuy, canSpawn } from "../logic/customerQueue";
 import type { Farmer } from "../entities/Farmer";
 import type { GameState } from "../state/GameState";
@@ -19,6 +19,7 @@ export class MarketSystem {
   private restockTimer = 0;
   private purchaseTimer = 0;
   private cashTimer = 0;
+  private restockIndex = 0;
   private readonly entrance = new Phaser.Math.Vector2(1960, 900);
   private readonly exit = new Phaser.Math.Vector2(1980, 600);
   private readonly queueSlots = [
@@ -42,27 +43,26 @@ export class MarketSystem {
     this.updateCustomers(delta);
     this.updateCash(delta);
     const s = this.getState();
-    this.stall.updateDisplay(s.inventory.market, s.economy.tillCoins);
+    this.stall.updateDisplay(s.market, s.economy.tillCoins);
   }
   private updateRestock(delta: number): void {
     this.restockTimer = Math.max(0, this.restockTimer - delta);
     const s = this.getState();
-    if (
-      this.restockTimer > 0 ||
-      s.inventory.barn <= 0 ||
-      s.inventory.market >= s.inventory.marketCapacity
-    )
-      return;
-    const inventory = restockMarketOne(s.inventory);
-    if (inventory === s.inventory) return;
-    this.setState({ ...s, inventory });
+    if (this.restockTimer > 0) return;
+    let chosen: ResourceId | null = null;
+    for (let offset = 0; offset < RESOURCE_IDS.length; offset++) { const index = (this.restockIndex + offset) % RESOURCE_IDS.length; const resource = RESOURCE_IDS[index]!; if (s.barn[resource] > 0 && s.market[resource] < s.marketCapacity[resource]) { chosen = resource; this.restockIndex = (index + 1) % RESOURCE_IDS.length; break; } }
+    if (!chosen) return;
+    const result = restockMarketResourceOne(chosen, s.barn, s.market, s.marketCapacity);
+    if (!result.changed) return;
+    const inventory = chosen === "wheat" ? { ...s.inventory, barn: result.barn.wheat, market: result.market.wheat } : s.inventory;
+    this.setState({ ...s, barn: result.barn, market: result.market, inventory });
     this.restockTimer = GAME_CONFIG.marketRestockIntervalMs;
     this.transferDot(
       1510,
       500,
       this.stall.shelfPoint().x,
       this.stall.shelfPoint().y,
-      palette.wheat,
+      chosen === "corn" ? 0xf2c84b : chosen === "egg" ? palette.cream : palette.wheat,
     );
     this.tutorial(4);
   }
@@ -82,6 +82,8 @@ export class MarketSystem {
           this.entrance.x,
           this.entrance.y,
         );
+        const available = getUnlockedCustomerResources(this.getState().landExpansion.eastCornFieldUnlocked, this.getState().landExpansion.southChickenCoopUnlocked);
+        c.setRequestedResource(available[c.id % available.length] ?? "wheat");
         this.customers.push(c);
       }
     }
@@ -109,7 +111,8 @@ export class MarketSystem {
           this.queueSlots[0]?.x ?? 0,
           this.queueSlots[0]?.y ?? 0,
         ) < 8;
-      front.showOutOfStock(atFront && state.inventory.market === 0);
+      const requestedStock = state.market[front.requestedResource];
+      front.showOutOfStock(atFront);
       if (
         atFront &&
         canFrontBuy(
@@ -118,7 +121,7 @@ export class MarketSystem {
             phase: c.phase,
             purchased: c.purchased,
           })),
-          state.inventory.market,
+          requestedStock,
         )
       ) {
         this.purchaseTimer += delta;
@@ -139,13 +142,10 @@ export class MarketSystem {
   }
   private completeSale(customer: Customer): void {
     const s = this.getState();
-    const result = sellWheatToCustomer(
-      { inventory: s.inventory, economy: s.economy },
-      customer.purchased,
-    );
-    if (!result.sold) return;
+    const result = sellRequestedResource(customer.requestedResource, s.market, s.economy.tillCoins, s.soldByResource, customer.purchased);
+    if (!result.changed) return;
     customer.purchased = true;
-    customer.giveBag();
+    customer.giveBag(customer.requestedResource);
     customer.showOutOfStock(false);
     customer.phase = "leaving";
     this.queue.shift();
@@ -154,8 +154,10 @@ export class MarketSystem {
     this.purchaseTimer = 0;
     this.setState({
       ...s,
-      inventory: result.state.inventory,
-      economy: result.state.economy,
+      market: result.market,
+      soldByResource: result.sold,
+      inventory: customer.requestedResource === "wheat" ? { ...s.inventory, market: result.market.wheat } : s.inventory,
+      economy: { ...s.economy, tillCoins: result.tillCoins, soldUnits: s.economy.soldUnits + 1, customersServed: s.economy.customersServed + 1 },
       firstSaleCompleted: true,
     });
     const shelf = this.stall.shelfPoint(),
@@ -165,7 +167,7 @@ export class MarketSystem {
       shelf.y,
       customer.x,
       customer.y - 40,
-      palette.wheat,
+      customer.requestedResource === "corn" ? 0xf2c84b : customer.requestedResource === "egg" ? palette.cream : palette.wheat,
     );
     this.transferDot(customer.x, customer.y - 55, till.x, till.y, palette.coin);
     this.tutorial(5);

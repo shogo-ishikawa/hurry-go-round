@@ -83,7 +83,7 @@ export class UpgradeSystem {
     this.setState({
       ...s,
       economy: { ...s.economy, walletCoins: result.value.walletCoins },
-      upgrades: { harvestSpeedLevel: result.value.harvestSpeedLevel },
+      upgrades: { ...s.upgrades, harvestSpeedLevel: result.value.harvestSpeedLevel },
       firstUpgradePurchased: true,
     });
     this.progress = 0;

@@ -1,85 +1,65 @@
 # Hurry-Go-Round
 
-A bright browser farm game about keeping a satisfying farm-to-market circuit moving. **v0.4.0 — Workers & Automation Loop** adds two staged labor hires while preserving the complete manual harvest, market, coin, and harvest-speed-upgrade loop.
+明るい農場を走り回り、生産から販売までの循環を育てるブラウザーゲームです。**v0.5.0 — Farm Expansion & First Livestock** は、v0.4.0 の麦・市場・従業員ループを保ったまま、土地購入、とうもろこし、鶏とたまごを追加します。
 
-## Current gameplay
+## v0.5.0 のゲーム進行
 
-The player may continue to harvest wheat manually, carry 12 visible bundles, unload at the barn, stock the market, serve queued customers, collect till coins, and purchase harvest-speed levels.
+1. 麦を収穫し、倉庫へ納品して市場で販売します。
+2. **120コイン**で東の土地を購入し、24株のとうもろこし畑を開放します。
+3. 納屋近くの看板で背負い籠を **12 → 18（60コイン）→ 24（140コイン）**へ拡張します。
+4. 東の土地購入後、**240コイン**で南の鶏小屋を購入します。
+5. とうもろこしを容量12の餌箱へ入れると、鶏3羽が4.5秒ごとに餌1個をたまご1個へ変換します。
+6. 容量12の卵置き場から回収し、倉庫へ納品して市場で販売します。
 
-Automation is optional and visible:
+背負い籠は一度に一種類だけを保持します。倉庫と市場は麦・とうもろこし・たまごを資源別に管理し、市場棚は各8個です。販売価格は麦2、とうもろこし3、たまご5コインです。既存の収穫・運搬スタッフは引き続き**麦専用**です。
 
-1. Earn coins through the manual market loop.
-2. Hire the harvest worker for **40 coins** by remaining on the hiring station for 900 ms.
-3. The harvest worker follows fixed safe farm waypoints, harvests ready wheat, carries up to four bundles, and deposits them one at a time into the **16-unit field collection crate**.
-4. Enter the crate’s 95-unit pickup area to transfer its wheat into the player’s pack every 160 ms, then deliver it manually if desired.
-5. Earn another **75 coins** and hire the unlocked transport worker.
-6. The transport worker loads up to six crate bundles, follows the fixed farm route to the barn, unloads one at a time, and returns to repeat the cycle.
+## 操作方法
 
-The market continues restocking from the barn regardless of wheat carried by the player or either worker. Customer sales and cash collection continue during automation.
+- **WASD / 矢印キー:** 手動移動。クリック目的地を解除します。
+- **固定ジョイスティック:** キーボードと同じ優先度の手動移動です。
+- **短いクリック / タップ:** 指定地点まで移動し、到着すると停止します。
+- **ジョイスティック外のドラッグ:** 押し始めを原点として方向を決め、押している間はその方向へ進み続けます。原点付近へ戻すと一時停止し、離すと目的地を残さず即時停止します。
+- 収穫、納品、補充、購入、給餌、卵回収は接近または範囲内での滞在により進行します。未購入地へはどの入力方法でも侵入できません。
 
-## Japanese public interface
+## 看板・案内と日本語UI
 
-All public gameplay labels, tutorial messages, worker statuses, interaction zones, affordability feedback, and purchase messages are Japanese. The game title **Hurry-Go-Round** and version number remain in English.
+施設名は木製看板または建物プレートへ収め、地面へ裸の文字を置きません。詳細案内は中距離で背景付きパネルに一つだけ表示し、操作範囲へ入ると消えます。同じ警告を毎フレーム生成しません。公開UIはゲームタイトルとバージョンを除いて日本語で、資源名・施設名・警告は `src/game/config/localization.ts` に集中管理しています。
 
-## Controls and responsive behavior
+HUDは背負い籠、資源別倉庫、資源別売り場、麦の自動化、解放後の鶏小屋を表示します。1920×1080、1440×900、844×390、390×844、320×568を対象に予約入力領域を計算し、HUD上から移動を開始しません。
 
-- **WASD / arrow keys:** direct movement and cancellation of a point destination.
-- **Virtual joystick:** always available on desktop, mobile, and tablet.
-- **Click or tap:** set a visible movement destination.
-- **Drag:** continuously retarget the active destination.
-- Harvesting, unloading, restocking, customer purchases, cash pickup, hiring, crate pickup, and worker transfers are automatic proximity interactions.
+## 技術構成
 
-The Phaser canvas keeps `RESIZE` scaling and responsive camera zoom. Inventory, economy, automation, tutorial, and joystick regions are excluded from point navigation. Narrow portrait layouts use compact Japanese automation labels without blocking the joystick.
+- TypeScript（strict）
+- Phaser 3
+- Vite
+- Vitest
+- ブラウザーAPI（追加ランタイム依存、外部画像、CDN、外部サービスなし）
 
-## Setup and commands
+```text
+src/game/
+├── art/       共有パレット、地形、短時間エフェクト
+├── config/    バランス値、資源定義、日本語文字列
+├── entities/  農夫、作物、鶏、看板、市場、麦従業員
+├── input/     ジョイスティック、レスポンシブ予約領域
+├── logic/     Phaser非依存の資源・土地・畜産・市場・案内ロジック
+├── scenes/    システム調整とカメラ固定HUD
+├── state/     資源別在庫、土地、畜産、経済の正規状態
+└── systems/   市場、拡張、強化、雇用、麦自動化
+```
 
-Requires Node.js 20.19+ or 22.12+ and npm.
+## セットアップと検証
+
+Node.js 20.19+ または22.12+とnpmが必要です。
 
 ```bash
 npm ci --no-audit --no-fund
 npm run dev
-```
-
-| Command             | Purpose                                |
-| ------------------- | -------------------------------------- |
-| `npm run dev`       | Start the Vite development server.     |
-| `npm run build`     | Strictly type-check and build `dist/`. |
-| `npm run typecheck` | Run TypeScript without emitting files. |
-| `npm test`          | Run deterministic Vitest tests once.   |
-| `npm run check`     | Run type checking and all tests.       |
-
-## Architecture
-
-```text
-src/game/
-├── art/          shared palette, terrain, and bounded effects
-├── config/       centralized game, economy, crate, and worker balance
-├── entities/     farmer, crops, market, crate, hiring pads, and workers
-├── input/        joystick and tested responsive reserved layout
-├── logic/        deterministic inventory, market, hiring, and worker transfers
-├── routes/       immutable static worker waypoints
-├── scenes/       game-state owner and camera-independent Japanese UI
-├── state/        authoritative economy, inventory, and worker state
-└── systems/      market, upgrade, hiring, and worker finite-state orchestration
-docs/
-├── ART_DIRECTION.md
-├── V0.1.0_SPEC.md
-├── V0.2.0_SPEC.md
-├── V0.3.0_SPEC.md
-└── V0.4.0_SPEC.md
-```
-
-Worker entities render position, animation, cargo, and status, while all persistent inventory, hiring, and currency values remain in `GameState`. Pure functions complete logical transfers before bounded visual tweens represent them.
-
-## GitHub Pages
-
-```bash
 npm run check
 npm run build
 ```
 
-Vite’s base remains `/hurry-go-round/`, matching `https://<github-owner>.github.io/hurry-go-round/`. Pull requests run CI and pushes to `main` deploy `dist/` through GitHub Actions. Do not commit `dist/` or `node_modules/`.
+GitHub Pages用のVite baseは `/hurry-go-round/` です。`dist/` と `node_modules/` はコミットしません。
 
-## Intentionally deferred
+## 今回実装しないもの
 
-More workers, worker upgrades or skins, salaries, fatigue, happiness, cashiers, automated cash pickup, pathfinding, navigation meshes, land expansion, other crops, animals, processing, crafting, recipes, multiple markets, saves, IndexedDB, localStorage, PWA installation, service workers, offline progression, audio, accounts, cloud synchronization, rankings, advertisements, payments, external APIs, and multiplayer are outside v0.4.0.
+牛・豚・羊、乳・肉・羊毛、繁殖・病気・寿命・個体差、とうもろこし/卵/餌専用従業員、複数鶏小屋、加工品・パン・料理・レシピ、季節・天候・灌漑・農薬・肥料・土壌品質、セーブ、IndexedDB、localStorage、PWA、オフライン進行、音楽・効果音、アカウント、クラウド同期、ランキング、課金・広告、外部API、マルチプレイはv0.5.0の対象外です。

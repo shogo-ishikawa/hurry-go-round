@@ -1,10 +1,11 @@
 import Phaser from "phaser";
 import { palette } from "../art/palette";
+import type { ResourceAmounts } from "../config/resourceDefinitions";
 export class MarketStall extends Phaser.GameObjects.Container {
   private stockArt: Phaser.GameObjects.Graphics;
   private cashArt: Phaser.GameObjects.Graphics;
   private multiplier: Phaser.GameObjects.Text;
-  private displayedStock = -1;
+  private displayedStock = "";
   private displayedTill = -1;
   constructor(scene: Phaser.Scene, x: number, y: number) {
     const shadow = scene.add.ellipse(14, 42, 330, 100, palette.shadow, 0.24);
@@ -50,25 +51,21 @@ export class MarketStall extends Phaser.GameObjects.Container {
     this.multiplier = multiplier;
     scene.add.existing(this);
     this.setDepth(y + 90);
-    this.updateDisplay(0, 0);
+    this.updateDisplay({ wheat: 0, corn: 0, egg: 0 }, 0);
   }
-  updateDisplay(stock: number, till: number): void {
-    if (stock === this.displayedStock && till === this.displayedTill) return;
-    this.displayedStock = stock;
+  updateDisplay(stock: ResourceAmounts, till: number): void {
+    const stockKey = `${stock.wheat}/${stock.corn}/${stock.egg}`;
+    if (stockKey === this.displayedStock && till === this.displayedTill) return;
+    this.displayedStock = stockKey;
     this.displayedTill = till;
     const s = this.stockArt.clear();
-    for (let i = 0; i < 8; i++) {
-      const x = -112 + (i % 4) * 42,
-        y = -54 + Math.floor(i / 4) * 25;
+    const resources = ["wheat", "corn", "egg"] as const;
+    for (let section = 0; section < resources.length; section++) for (let i = 0; i < 8; i++) {
+      const resource = resources[section]!, x = -112 + (i % 4) * 20 + section * 78, y = -54 + Math.floor(i / 4) * 25;
       s.lineStyle(2, palette.outline, 0.5)
         .fillStyle(palette.soilDark, 0.22)
-        .fillRoundedRect(x - 13, y - 9, 26, 18, 5)
-        .strokeRoundedRect(x - 13, y - 9, 26, 18, 5);
-      if (i < stock)
-        s.fillStyle(palette.wheat)
-          .fillEllipse(x, y, 19, 13)
-          .lineStyle(2, palette.wheatLight)
-          .lineBetween(x, y - 6, x + 5, y - 17);
+        .fillRoundedRect(x - 8, y - 8, 16, 16, 4).strokeRoundedRect(x - 8, y - 8, 16, 16, 4);
+      if (i < stock[resource]) { const color = resource === "corn" ? 0xf2c84b : resource === "egg" ? palette.cream : palette.wheat; s.fillStyle(color).fillEllipse(x, y, 12, resource === "egg" ? 15 : 10).lineStyle(1, palette.outline).strokeEllipse(x, y, 12, resource === "egg" ? 15 : 10); }
     }
     const c = this.cashArt.clear();
     c.lineStyle(2, palette.outline, 0.5)

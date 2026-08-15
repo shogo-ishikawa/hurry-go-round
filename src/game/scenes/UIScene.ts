@@ -4,6 +4,8 @@ import { VirtualJoystick } from "../input/VirtualJoystick";
 import { calculateInputLayout } from "../input/inputLayout";
 import { GAME_EVENTS, type GameState } from "../state/GameState";
 import type { Point } from "../logic/movement";
+import { UI_TEXT } from "../config/localization";
+import { palette as colors } from "../art/palette";
 let portraitNoticeShown = false;
 export class UIScene extends Phaser.Scene {
   private carriedText!: Phaser.GameObjects.Text;
@@ -23,6 +25,8 @@ export class UIScene extends Phaser.Scene {
   private crateText!: Phaser.GameObjects.Text;
   private harvestWorkerText!: Phaser.GameObjects.Text;
   private transportWorkerText!: Phaser.GameObjects.Text;
+  private livestockText!: Phaser.GameObjects.Text;
+  private contextHint!: Phaser.GameObjects.Text;
   constructor() {
     super("ui");
   }
@@ -35,17 +39,17 @@ export class UIScene extends Phaser.Scene {
       color: "#49382e",
       fontStyle: "bold",
     };
-    this.carriedText = this.add.text(27, 20, "背負い籠  0 / 12", style);
-    this.barnText = this.add.text(27, 52, "倉庫  0", style);
-    this.marketText = this.add.text(0, 0, "市場  0 / 8", style);
+    this.carriedText = this.add.text(27, 20, "背負い籠\n空", style);
+    this.barnText = this.add.text(27, 52, "倉庫\n麦 0", style);
+    this.marketText = this.add.text(0, 0, "売り場\n麦 0 / 8", style);
     this.tillText = this.add.text(0, 0, "売上  0", style);
     this.walletText = this.add.text(0, 0, "コイン  0", style);
-    this.versionText = this.add.text(0, 0, "v0.4.0", {
+    this.versionText = this.add.text(0, 0, "v0.5.0", {
       ...style,
       fontSize: "14px",
       color: "#755c49",
     });
-    this.automationTitle = this.add.text(0, 0, "自動化", style);
+    this.automationTitle = this.add.text(0, 0, "麦の自動化", style);
     this.crateText = this.add.text(0, 0, "集荷箱  0 / 16", style);
     this.harvestWorkerText = this.add.text(0, 0, "収穫スタッフ  未雇用", style);
     this.transportWorkerText = this.add.text(
@@ -54,6 +58,8 @@ export class UIScene extends Phaser.Scene {
       "運搬スタッフ  未雇用",
       style,
     );
+    this.livestockText = this.add.text(0, 0, "鶏小屋\n餌 0 / 12\n卵 0 / 12", { ...style, fontSize: "16px" }).setVisible(false);
+    this.contextHint = this.add.text(0, 0, "", { fontFamily: "system-ui", fontSize: "16px", color: "#fff4d8", backgroundColor: "#49382ee8", align: "center", padding: { x: 14, y: 9 }, wordWrap: { width: 340 } }).setOrigin(.5).setAlpha(0);
     this.tutorial = this.add
       .text(0, 0, "麦畑へ移動しましょう", {
         fontFamily: "system-ui",
@@ -88,6 +94,7 @@ export class UIScene extends Phaser.Scene {
     this.game.events.on(GAME_EVENTS.full, this.showFull, this);
     this.game.events.on(GAME_EVENTS.tutorial, this.updateTutorial, this);
     this.game.events.on(GAME_EVENTS.wallet, this.pulseWallet, this);
+    this.game.events.on(GAME_EVENTS.hint, this.showContextHint, this);
     this.scale.on(Phaser.Scale.Events.RESIZE, this.layout, this);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, this.cleanup, this);
     this.layout();
@@ -105,13 +112,12 @@ export class UIScene extends Phaser.Scene {
   }
   private updateState(state: GameState): void {
     this.lastState = state;
-    this.carriedText.setText(
-      `背負い籠  ${state.inventory.carried} / ${state.inventory.capacity}`,
-    );
-    this.barnText.setText(`倉庫  ${state.inventory.barn}`);
-    this.marketText.setText(
-      `市場  ${state.inventory.market} / ${state.inventory.marketCapacity}`,
-    );
+    const carried = state.carriedInventory;
+    this.carriedText.setText(carried.resource ? `背負い籠\n${UI_TEXT.resources[carried.resource]}  ${carried.count} / ${carried.capacity}` : "背負い籠\n空");
+    const unlocked = state.landExpansion;
+    this.barnText.setText(["倉庫", `麦 ${state.barn.wheat}`, unlocked.eastCornFieldUnlocked ? `とうもろこし ${state.barn.corn}` : "", unlocked.southChickenCoopUnlocked ? `たまご ${state.barn.egg}` : ""].filter(Boolean).join("\n"));
+    this.marketText.setText(["売り場", `麦 ${state.market.wheat} / 8`, unlocked.eastCornFieldUnlocked ? `とうもろこし ${state.market.corn} / 8` : "", unlocked.southChickenCoopUnlocked ? `たまご ${state.market.egg} / 8` : ""].filter(Boolean).join("\n"));
+    this.livestockText.setVisible(unlocked.southChickenCoopUnlocked).setText(`鶏小屋\n餌 ${state.livestock.feed} / ${state.livestock.feedCapacity}\n卵 ${state.livestock.eggs} / ${state.livestock.eggCapacity}`);
     this.tillText.setText(`売上  ${state.economy.tillCoins}`);
     this.walletText.setText(`コイン  ${state.economy.walletCoins}`);
     const compact = this.scale.width < 520;
@@ -127,15 +133,19 @@ export class UIScene extends Phaser.Scene {
     this.drawMeters();
   }
   private drawMeters(): void {
-    const count = this.lastState?.inventory.carried ?? 0;
+    const count = this.lastState?.carriedInventory.count ?? 0;
+    const capacity = this.lastState?.carriedInventory.capacity ?? 12;
     const layout = calculateInputLayout(this.scale.width, this.scale.height);
     const g = this.meters.clear();
-    for (let i = 0; i < 12; i++) {
-      const x = layout.inventoryHud.x + 15 + i * 12;
+    const resource = this.lastState?.carriedInventory.resource;
+    const fill = resource === "corn" ? 0xf2c84b : resource === "egg" ? colors.cream : colors.wheat;
+    const columns = this.scale.width < 520 ? 12 : 12;
+    for (let i = 0; i < capacity; i++) {
+      const x = layout.inventoryHud.x + 15 + (i % columns) * 12;
+      const y = layout.inventoryHud.y + 66 + Math.floor(i / columns) * 10;
       g.lineStyle(1, palette.outline, 0.5)
-        .fillStyle(i < count ? palette.wheat : palette.creamDark, 0.9)
-        .fillRoundedRect(x, layout.inventoryHud.y + 64, 9, 7, 2)
-        .strokeRoundedRect(x, layout.inventoryHud.y + 64, 9, 7, 2);
+        .fillStyle(i < count ? fill : palette.creamDark, 0.9)
+        .fillRoundedRect(x, y, 9, 7, 2).strokeRoundedRect(x, y, 9, 7, 2);
     }
   }
   private showFull(): void {
@@ -156,6 +166,7 @@ export class UIScene extends Phaser.Scene {
       duration: 100,
     });
   }
+  private showContextHint(message: string): void { this.contextHint.setText(message).setAlpha(1); this.tweens.killTweensOf(this.contextHint); this.tweens.add({ targets: this.contextHint, alpha: 0, delay: 1700, duration: 350 }); }
   private updateTutorial(stage: number): void {
     const messages = [
       "麦畑へ移動しましょう",
@@ -221,6 +232,7 @@ export class UIScene extends Phaser.Scene {
         l.economyHud.height,
         18,
       );
+    if (this.lastState?.landExpansion.southChickenCoopUnlocked) this.panels.fillStyle(palette.cream, .94).fillRoundedRect(l.livestockHud.x, l.livestockHud.y, l.livestockHud.width, l.livestockHud.height, 18).lineStyle(3, palette.creamDark).strokeRoundedRect(l.livestockHud.x, l.livestockHud.y, l.livestockHud.width, l.livestockHud.height, 18);
     this.panels
       .fillStyle(palette.cream, 0.94)
       .fillRoundedRect(
@@ -239,10 +251,12 @@ export class UIScene extends Phaser.Scene {
         18,
       );
     this.carriedText.setPosition(l.inventoryHud.x + 15, l.inventoryHud.y + 8);
-    this.barnText.setPosition(l.inventoryHud.x + 15, l.inventoryHud.y + 36);
+    this.barnText.setPosition(l.inventoryHud.x + 15, l.inventoryHud.y + 52).setFontSize(w < 520 ? 13 : 15);
     this.marketText.setPosition(l.economyHud.x + 15, l.economyHud.y + 8);
-    this.tillText.setPosition(l.economyHud.x + 15, l.economyHud.y + 37);
-    this.walletText.setPosition(l.economyHud.x + 15, l.economyHud.y + 66);
+    this.tillText.setPosition(l.economyHud.x + 15, l.economyHud.y + 82).setFontSize(w < 520 ? 13 : 15);
+    this.walletText.setPosition(l.economyHud.x + 15, l.economyHud.y + 104).setFontSize(w < 520 ? 13 : 15);
+    this.marketText.setFontSize(w < 520 ? 13 : 15);
+    this.livestockText.setPosition(l.livestockHud.x + 12, l.livestockHud.y + 10).setFontSize(w < 520 ? 13 : 16);
     this.automationTitle.setPosition(
       l.automationHud.x + 14,
       l.automationHud.y + 7,
@@ -260,6 +274,7 @@ export class UIScene extends Phaser.Scene {
       .setPosition(l.tutorial.x + l.tutorial.width / 2, l.tutorial.y + 25);
     this.moveHint.setPosition(w / 2, h - 28).setVisible(w >= 900);
     this.fullBadge.setPosition(w / 2, Math.min(135, h * 0.35));
+    this.contextHint.setPosition(w / 2, Math.min(h - 190, Math.max(100, h * .2))).setWordWrapWidth(Math.max(160, Math.min(340, w - 32)));
     this.joystick?.layout();
     this.joystick?.setEnabled(true);
     this.drawMeters();
@@ -290,6 +305,7 @@ export class UIScene extends Phaser.Scene {
     this.game.events.off(GAME_EVENTS.full, this.showFull, this);
     this.game.events.off(GAME_EVENTS.tutorial, this.updateTutorial, this);
     this.game.events.off(GAME_EVENTS.wallet, this.pulseWallet, this);
+    this.game.events.off(GAME_EVENTS.hint, this.showContextHint, this);
     this.scale.off(Phaser.Scale.Events.RESIZE, this.layout, this);
   }
 }

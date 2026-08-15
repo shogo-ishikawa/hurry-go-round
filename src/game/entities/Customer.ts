@@ -1,6 +1,7 @@
 import Phaser from "phaser";
 import { palette } from "../art/palette";
 import type { CustomerPhase } from "../logic/customerQueue";
+import type { ResourceId } from "../config/resourceDefinitions";
 const shirts = [palette.plum, palette.sky, palette.coral, palette.teal];
 const hairs = [
   palette.outline,
@@ -11,6 +12,7 @@ const hairs = [
 export class Customer extends Phaser.GameObjects.Container {
   phase: CustomerPhase = "entering";
   purchased = false;
+  requestedResource: ResourceId = "wheat";
   readonly id: number;
   private bubble: Phaser.GameObjects.Container;
   private bag: Phaser.GameObjects.Graphics;
@@ -41,16 +43,13 @@ export class Customer extends Phaser.GameObjects.Container {
     const cloud = scene.add
       .ellipse(0, -126, 65, 42, palette.cream)
       .setStrokeStyle(2, palette.outline);
-    const mark = scene.add
-      .graphics()
-      .lineStyle(3, palette.stubble)
-      .lineBetween(-8, -130, 8, -130)
-      .lineBetween(0, -138, 0, -122);
+    const mark = scene.add.graphics();
     const bubble = scene.add.container(0, 0, [cloud, mark]).setVisible(false);
     super(scene, x, y, [shadow, art, bag, bubble]);
     this.id = id;
     this.bubble = bubble;
     this.bag = bag;
+    this.drawRequest(mark, "wheat");
     scene.add.existing(this);
     this.setDepth(y + 70);
   }
@@ -71,12 +70,15 @@ export class Customer extends Phaser.GameObjects.Container {
   showOutOfStock(show: boolean): void {
     this.bubble.setVisible(show);
   }
-  giveBag(): void {
+  setRequestedResource(resource: ResourceId): void { this.requestedResource = resource; const mark = this.bubble.list[1]; if (mark instanceof Phaser.GameObjects.Graphics) this.drawRequest(mark, resource); }
+  giveBag(resource: ResourceId = this.requestedResource): void {
+    const color = resource === "corn" ? 0xf2c84b : resource === "egg" ? palette.cream : palette.wheat;
     this.bag
       .clear()
       .lineStyle(2, palette.outline)
-      .fillStyle(palette.wheat)
+      .fillStyle(color)
       .fillRoundedRect(14, -42, 25, 31, 7)
       .strokeRoundedRect(14, -42, 25, 31, 7);
   }
+  private drawRequest(mark: Phaser.GameObjects.Graphics, resource: ResourceId): void { mark.clear().lineStyle(2, palette.outline); if (resource === "egg") mark.fillStyle(palette.cream).fillEllipse(0, -130, 16, 21).strokeEllipse(0, -130, 16, 21); else if (resource === "corn") mark.fillStyle(0xf2c84b).fillEllipse(0, -130, 13, 25).strokeEllipse(0, -130, 13, 25).lineStyle(3, palette.foliage).lineBetween(-5, -120, -12, -130); else mark.fillStyle(palette.wheat).fillRoundedRect(-8, -138, 16, 18, 4).strokeRoundedRect(-8, -138, 16, 18, 4); }
 }
