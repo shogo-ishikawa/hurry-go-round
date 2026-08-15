@@ -4,10 +4,11 @@ import type { ProcessingLandState, ProcessingMachineState } from "../logic/proce
 import type { ProcessingWorkerState } from "../logic/processingWorkers";
 import type { RoutingPolicyId } from "../logic/processingRouting";
 import type { CollectionNetwork } from "../logic/collectionNetwork";
+import type { DairyState } from "../logic/dairy";
 
 export const SAVE_FORMAT = "hurry-go-round-save" as const;
-export const SAVE_SCHEMA_VERSION = 4 as const;
-export const GAME_VERSION = "0.9.1";
+export const SAVE_SCHEMA_VERSION = 5 as const;
+export const GAME_VERSION = "0.9.3";
 
 export interface PersistedSettings {
   textScale: 1 | 1.15 | 1.3;
@@ -111,6 +112,7 @@ export interface PersistedGameSnapshot {
   contracts: ContractState;
   processing: { land:ProcessingLandState; mill:ProcessingMachineState; bakery:ProcessingMachineState; millOperator:ProcessingWorkerState; baker:ProcessingWorkerState; routingPolicy:RoutingPolicyId; rawReserves:{wheat:number;corn:number;egg:number}; autoSelectionRoundRobin:{mill:number;bakery:number} };
   collectionNetwork: CollectionNetwork;
+  dairy: DairyState;
   progression: Record<string, boolean>;
   statistics: { harvestedTotal: number };
   playTimeMs: number;

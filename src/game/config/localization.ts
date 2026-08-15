@@ -9,6 +9,7 @@ export const UI_TEXT = {
     cornmeal: "コーンミール",
     bread: "パン",
     cornbread: "コーンブレッド",
+      hay: "干し草", milk: "牛乳", butter: "バター", cheese: "チーズ",
   } satisfies Record<ResourceId, string>,
   facilities: {
     delivery: "納品",

@@ -13,6 +13,7 @@ export function createPersistedSnapshot(state: GameState, runtime: RuntimeSnapsh
     automation: { wheatFieldCrate: state.inventory.fieldCrate, cornFieldCrate: state.automation.cornFieldCrate }, crops: runtime.crops.map(c => ({ ...c })), contracts: structuredClone(state.contracts),
     processing: structuredClone(state.processing),
     collectionNetwork: structuredClone(state.collectionNetwork),
+    dairy: structuredClone(state.dairy),
     progression: { deliveredOnce: state.deliveredOnce, firstSaleCompleted: state.firstSaleCompleted, firstCashCollected: state.firstCashCollected, firstUpgradePurchased: state.firstUpgradePurchased, firstHarvestWorkerHired: state.firstHarvestWorkerHired, firstFieldCratePickup: state.firstFieldCratePickup, firstTransportWorkerHired: state.firstTransportWorkerHired, firstAutomatedBarnDelivery: state.firstAutomatedBarnDelivery }, statistics: { harvestedTotal: state.harvestedTotal }, playTimeMs: runtime.playTimeMs, saveSequence: runtime.saveSequence,
   };
 }
