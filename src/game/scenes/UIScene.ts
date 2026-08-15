@@ -27,6 +27,10 @@ export class UIScene extends Phaser.Scene {
   private transportWorkerText!: Phaser.GameObjects.Text;
   private livestockText!: Phaser.GameObjects.Text;
   private contextHint!: Phaser.GameObjects.Text;
+  private contractButton!: Phaser.GameObjects.Text;
+  private pauseButton!: Phaser.GameObjects.Text;
+  private saveStatus!: Phaser.GameObjects.Text;
+  private overlay: Phaser.GameObjects.GameObject[] = [];
   constructor() {
     super("ui");
   }
@@ -60,6 +64,9 @@ export class UIScene extends Phaser.Scene {
     );
     this.livestockText = this.add.text(0, 0, "鶏小屋\n餌 0 / 12\n卵 0 / 12", { ...style, fontSize: "16px" }).setVisible(false);
     this.contextHint = this.add.text(0, 0, "", { fontFamily: "system-ui", fontSize: "16px", color: "#fff4d8", backgroundColor: "#49382ee8", align: "center", padding: { x: 14, y: 9 }, wordWrap: { width: 340 } }).setOrigin(.5).setAlpha(0);
+    this.contractButton=this.add.text(0,0,"契約を見る  E",{...style,fontSize:"17px",backgroundColor:"#297c78",color:"#fff4d8",padding:{x:18,y:13}}).setOrigin(.5).setVisible(false).setInteractive({useHandCursor:true}).on("pointerup",()=>this.openContracts());
+    this.pauseButton=this.add.text(0,0,"一時停止",{...style,fontSize:"14px",backgroundColor:"#fff4d8",padding:{x:13,y:10}}).setOrigin(1,0).setInteractive({useHandCursor:true}).on("pointerup",()=>this.openPause());
+    this.saveStatus=this.add.text(0,0,"変更なし",{...style,fontSize:"13px",backgroundColor:"#fff4d8cc",padding:{x:8,y:6}}).setOrigin(1,0);
     this.tutorial = this.add
       .text(0, 0, "麦畑へ移動しましょう", {
         fontFamily: "system-ui",
@@ -95,11 +102,28 @@ export class UIScene extends Phaser.Scene {
     this.game.events.on(GAME_EVENTS.tutorial, this.updateTutorial, this);
     this.game.events.on(GAME_EVENTS.wallet, this.pulseWallet, this);
     this.game.events.on(GAME_EVENTS.hint, this.showContextHint, this);
+    this.game.events.on(GAME_EVENTS.contractRange, this.showContractButton, this);
+    this.game.events.on(GAME_EVENTS.contractOpen, this.openContracts, this);
+    this.game.events.on("save-status",this.updateSaveStatus,this);
+    this.input.keyboard?.on("keydown-ESC",this.togglePause,this); this.input.keyboard?.on("keydown-P",this.togglePause,this);
     this.scale.on(Phaser.Scale.Events.RESIZE, this.layout, this);
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, this.cleanup, this);
     this.layout();
     this.showPortraitNotice();
   }
+  private updateSaveStatus(value:string):void{this.saveStatus.setText(value);}
+  private showContractButton(visible:boolean):void { this.contractButton.setVisible(visible&&!this.overlay.length); }
+  private togglePause=():void=>{ if(this.overlay.length)this.closeOverlay();else this.openPause(); };
+  private overlayBase(title:string): Phaser.GameObjects.Text {
+    this.scene.pause("game");this.resetInput();this.contractButton.setVisible(false); const w=this.scale.width,h=this.scale.height;
+    const shade=this.add.rectangle(w/2,h/2,w,h,0x49382e,.72).setInteractive(); const panel=this.add.rectangle(w/2,h/2,Math.min(w-24,1000),Math.min(h-24,700),palette.cream).setStrokeStyle(4,palette.outline); const heading=this.add.text(w/2,Math.max(24,h/2-Math.min(h-24,700)/2+28),title,{fontFamily:"system-ui",fontSize:`${Math.max(22,Math.min(34,w/20))}px`,fontStyle:"bold",color:"#49382e"}).setOrigin(.5,0); this.overlay.push(shade,panel,heading); return heading;
+  }
+  private button(x:number,y:number,label:string,fn:()=>void):Phaser.GameObjects.Text { const b=this.add.text(x,y,label,{fontFamily:"system-ui",fontSize:"16px",fontStyle:"bold",color:"#fff4d8",backgroundColor:"#297c78",padding:{x:16,y:12},align:"center"}).setOrigin(.5).setInteractive({useHandCursor:true}).on("pointerup",fn);this.overlay.push(b);return b; }
+  private openContracts=(reward?:{base:number;bonus:number;reputation:number}):void=>{ if(this.overlay.length)return;this.overlayBase(reward?"契約達成":"出荷契約");const state=this.lastState;if(!state)return;const w=this.scale.width,h=this.scale.height;
+    if(reward){const t=this.add.text(w/2,h/2-55,`基本報酬 ${reward.base}コイン\n早期達成ボーナス ${reward.bonus}コイン\n評判 +${reward.reputation}`,{fontFamily:"system-ui",fontSize:"21px",color:"#49382e",align:"center",lineSpacing:10}).setOrigin(.5);this.overlay.push(t);this.button(w/2,h/2+120,"閉じる",()=>this.closeOverlay());return;}
+    const rep=this.add.text(w/2,Math.max(70,h/2-Math.min(h-24,700)/2+75),`評判 ${state.contracts.reputation.points}　完了 ${state.contracts.statistics.contractsCompleted}`,{fontFamily:"system-ui",fontSize:"17px",color:"#49382e"}).setOrigin(.5);this.overlay.push(rep);const compact=w<700;const top=compact?145:h/2-145;state.contracts.offers.forEach((offer,i)=>{const x=compact?w/2:w/2-300+i*300,y=compact?top+i*120:top;const req=Object.entries(offer.requirements).filter(([,n])=>n>0).map(([k,n])=>`${k==="wheat"?"麦":k==="corn"?"とうもろこし":"たまご"} ${n}`).join(" / ");const card=this.add.text(x,y,`${offer.type==="priority"?"優先依頼":"契約候補"}\n${req}\n基本報酬 ${offer.baseRewardCoins}`,{fontFamily:"system-ui",fontSize:compact?"14px":"16px",color:"#49382e",backgroundColor:"#eadbb9",padding:{x:12,y:10},align:"center"}).setOrigin(.5,0);this.overlay.push(card);this.button(x-42,y+88,"受注",()=>{this.game.events.emit(GAME_EVENTS.contractAction,"accept",offer.id);this.closeOverlay();});this.button(x+45,y+88,"見送る",()=>{this.game.events.emit(GAME_EVENTS.contractAction,"decline",offer.id);this.closeOverlay();});});if(state.contracts.active){const active=this.add.text(w/2,h-125,`進行中の契約　${Object.entries(state.contracts.active.requirements).filter(([,n])=>n>0).map(([k,n])=>`${k==="wheat"?"麦":k==="corn"?"とうもろこし":"たまご"} ${state.contracts.active!.delivered[k as "wheat"]}/${n}`).join("　")}`,{fontFamily:"system-ui",fontSize:"16px",color:"#49382e"}).setOrigin(.5);this.overlay.push(active);let cancellationArmed=false;const cancelButton=this.button(w/2,h-75,"契約を中止",()=>{if(!cancellationArmed){cancellationArmed=true;cancelButton.setText("契約を中止しますか？　もう一度押す");return;}this.game.events.emit(GAME_EVENTS.contractAction,"cancel");this.closeOverlay();});}this.button(w-80,55,"閉じる",()=>this.closeOverlay());};
+  private openPause=():void=>{if(this.overlay.length)return;this.overlayBase("一時停止・管理");const w=this.scale.width,h=this.scale.height;["ゲームに戻る","今すぐ保存","出荷契約","設定","セーブデータを書き出す","セーブデータを読み込む","タイトルへ戻る","農場を最初からやり直す"].forEach((label,i)=>this.button(w/2,h/2-190+i*52,label,()=>{if(label==="ゲームに戻る")this.closeOverlay();else if(label==="出荷契約"){this.closeOverlay();this.openContracts();}else this.game.events.emit(`management-${label}`);}));};
+  private closeOverlay():void{for(const item of this.overlay)item.destroy();this.overlay=[];this.scene.resume("game");}
   getDirection(): Point {
     return this.joystick?.direction ?? { x: 0, y: 0 };
   }
@@ -274,6 +298,7 @@ export class UIScene extends Phaser.Scene {
     this.moveHint.setPosition(w / 2, h - 28).setVisible(w >= 900);
     this.fullBadge.setPosition(w / 2, Math.min(135, h * 0.35));
     this.contextHint.setPosition(w / 2, Math.min(h - 190, Math.max(100, h * .2))).setWordWrapWidth(Math.max(160, Math.min(340, w - 32)));
+    this.contractButton.setPosition(w/2,h-85);this.pauseButton.setPosition(w-12,12);this.saveStatus.setPosition(w-105,12);
     this.joystick?.layout();
     this.joystick?.setEnabled(true);
     this.drawMeters();
@@ -305,6 +330,7 @@ export class UIScene extends Phaser.Scene {
     this.game.events.off(GAME_EVENTS.tutorial, this.updateTutorial, this);
     this.game.events.off(GAME_EVENTS.wallet, this.pulseWallet, this);
     this.game.events.off(GAME_EVENTS.hint, this.showContextHint, this);
+    this.game.events.off(GAME_EVENTS.contractRange, this.showContractButton, this);this.game.events.off(GAME_EVENTS.contractOpen,this.openContracts,this);this.game.events.off("save-status",this.updateSaveStatus,this);this.input.keyboard?.off("keydown-ESC",this.togglePause,this);this.input.keyboard?.off("keydown-P",this.togglePause,this);
     this.scale.off(Phaser.Scale.Events.RESIZE, this.layout, this);
   }
 }
