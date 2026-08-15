@@ -15,7 +15,9 @@ const object = (value: unknown): value is Record<string, unknown> =>
   typeof value === "object" && value !== null && !Array.isArray(value);
 
 const finiteNonNegative = (value: unknown): value is number =>
-  typeof value === "number" && Number.isFinite(value) && value >= 0;
+  typeof value === "number" && Number.isFinite(value) && value >= 0 && Number.isInteger(value);
+
+const validAmounts=(set:unknown):boolean=>object(set)&&Object.keys(set).length===RESOURCE_IDS.length&&Object.keys(set).every(key=>RESOURCE_IDS.includes(key as (typeof RESOURCE_IDS)[number]))&&RESOURCE_IDS.every(key=>finiteNonNegative(set[key]));
 
 export function validateSnapshot(
   value: unknown,
@@ -128,6 +130,18 @@ export function validateSnapshot(
     ) {
       errors.push("invalid worker state");
     }
+  }
+
+  const processing=snapshot.processing;
+  if(!object(processing)||!object(processing.land)||typeof processing.land.yardUnlocked!=="boolean"||typeof processing.land.millBuilt!=="boolean"||typeof processing.land.bakeryBuilt!=="boolean"||!["balanced","market-first","contract-first","processing-first"].includes(processing.routingPolicy)) errors.push("invalid processing state");
+  else {
+    for(const [id,machine] of [["grain-mill",processing.mill],["bakery",processing.bakery]] as const){
+      const validRecipe=id==="grain-mill"?["auto","mill-flour","mill-cornmeal"]:["auto","bakery-bread","bakery-cornbread"];
+      if(!object(machine)||typeof machine.built!=="boolean"||![0,1,2,3].includes(machine.level)||machine.built!==(machine.level>0)||typeof machine.enabled!=="boolean"||!validRecipe.includes(machine.selectedMode)||!object(machine.input)||!object(machine.output)||!validAmounts(machine.input.amounts)||!validAmounts(machine.output.amounts)||!finiteNonNegative(machine.input.capacity)||!finiteNonNegative(machine.output.capacity)||RESOURCE_IDS.reduce((n,r)=>n+machine.input.amounts[r],0)>machine.input.capacity||RESOURCE_IDS.reduce((n,r)=>n+machine.output.amounts[r],0)>machine.output.capacity||!finiteNonNegative(machine.completedCycles)) errors.push("invalid machine state");
+      if(machine.activeCycle!==null&&(!object(machine.activeCycle)||!validRecipe.slice(1).includes(machine.activeCycle.recipeId)||!finiteNonNegative(machine.activeCycle.remainingMs)||typeof machine.activeCycle.durationMs!=="number"||!Number.isFinite(machine.activeCycle.durationMs)||machine.activeCycle.durationMs<=0||machine.activeCycle.remainingMs>machine.activeCycle.durationMs||!validAmounts(machine.activeCycle.reservedInputs)))errors.push("invalid active cycle");
+    }
+    for(const [role,worker] of [["mill",processing.millOperator],["baker",processing.baker]] as const){const allowed=role==="mill"?["wheat","corn","flour","cornmeal"]:["flour","cornmeal","egg","bread","cornbread"];const capacities=role==="mill"?[0,8,12,16]:[0,6,9,12];if(!object(worker)||typeof worker.hired!=="boolean"||![0,1,2,3].includes(worker.level)||worker.hired!==(worker.level>0)||!finiteNonNegative(worker.carriedAmount)||worker.carriedAmount>(capacities[worker.level]??0)||(worker.carriedAmount===0&&worker.carriedResource!==null)||(worker.carriedAmount>0&&(typeof worker.carriedResource!=="string"||!allowed.includes(worker.carriedResource))))errors.push("invalid processing worker");}
+    if(!object(processing.rawReserves)||![processing.rawReserves.wheat,processing.rawReserves.corn,processing.rawReserves.egg].every(finiteNonNegative)||!object(processing.autoSelectionRoundRobin)||![processing.autoSelectionRoundRobin.mill,processing.autoSelectionRoundRobin.bakery].every(finiteNonNegative))errors.push("invalid routing state");
   }
 
   if (

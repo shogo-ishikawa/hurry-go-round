@@ -1,6 +1,6 @@
 import Phaser from "phaser";
 import { palette } from "../art/palette";
-import type { ResourceAmounts } from "../config/resourceDefinitions";
+import { emptyResourceAmounts, type ResourceAmounts } from "../config/resourceDefinitions";
 export class MarketStall extends Phaser.GameObjects.Container {
   private stockArt: Phaser.GameObjects.Graphics;
   private cashArt: Phaser.GameObjects.Graphics;
@@ -51,7 +51,7 @@ export class MarketStall extends Phaser.GameObjects.Container {
     this.multiplier = multiplier;
     scene.add.existing(this);
     this.setDepth(y + 90);
-    this.updateDisplay({ wheat: 0, corn: 0, egg: 0 }, 0);
+    this.updateDisplay(emptyResourceAmounts(), 0);
   }
   updateDisplay(stock: ResourceAmounts, till: number): void {
     const stockKey = `${stock.wheat}/${stock.corn}/${stock.egg}`;

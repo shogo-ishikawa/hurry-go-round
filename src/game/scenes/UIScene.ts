@@ -50,7 +50,7 @@ export class UIScene extends Phaser.Scene {
     this.marketText = this.add.text(0, 0, "売り場\n麦 0 / 8", style);
     this.tillText = this.add.text(0, 0, "売上  0", style);
     this.walletText = this.add.text(0, 0, "コイン  0", style);
-    this.versionText = this.add.text(0, 0, "v0.8.0", {
+    this.versionText = this.add.text(0, 0, "v0.9.0", {
       ...style,
       fontSize: "14px",
       color: "#755c49",
@@ -145,8 +145,8 @@ export class UIScene extends Phaser.Scene {
     const carried = state.cargo; const total = getCarriedTotal(carried);
     this.carriedText.setText(total ? `背負い籠　${total} / ${carried.capacity}\n麦${carried.amounts.wheat}　とう${carried.amounts.corn}　卵${carried.amounts.egg}` : `背負い籠\n空　0 / ${carried.capacity}`);
     const unlocked = state.landExpansion;
-    this.barnText.setText(["倉庫", `麦 ${state.barn.wheat}`, unlocked.eastCornFieldUnlocked ? `とうもろこし ${state.barn.corn}` : "", unlocked.southChickenCoopUnlocked ? `たまご ${state.barn.egg}` : ""].filter(Boolean).join("\n"));
-    this.marketText.setText(["売り場", `麦 ${state.market.wheat} / 8`, unlocked.eastCornFieldUnlocked ? `とうもろこし ${state.market.corn} / 8` : "", unlocked.southChickenCoopUnlocked ? `たまご ${state.market.egg} / 8` : ""].filter(Boolean).join("\n"));
+    this.barnText.setText(["倉庫", `麦 ${state.barn.wheat}`, unlocked.eastCornFieldUnlocked ? `とうもろこし ${state.barn.corn}` : "", unlocked.southChickenCoopUnlocked ? `たまご ${state.barn.egg}` : "", state.processing.land.millBuilt ? `小麦粉 ${state.barn.flour}　コーンミール ${state.barn.cornmeal}` : "", state.processing.land.bakeryBuilt ? `パン ${state.barn.bread}　コーンブレッド ${state.barn.cornbread}` : ""].filter(Boolean).join("\n"));
+    this.marketText.setText(["売り場", `麦 ${state.market.wheat} / 8`, unlocked.eastCornFieldUnlocked ? `とうもろこし ${state.market.corn} / 8` : "", unlocked.southChickenCoopUnlocked ? `たまご ${state.market.egg} / 8` : "", state.processing.land.millBuilt ? `小麦粉 ${state.market.flour}/6　コーンミール ${state.market.cornmeal}/6` : "", state.processing.land.bakeryBuilt ? `パン ${state.market.bread}/6　コーンブレッド ${state.market.cornbread}/4` : ""].filter(Boolean).join("\n"));
     this.livestockText.setVisible(unlocked.southChickenCoopUnlocked).setText(`鶏小屋\n餌 ${state.livestock.feed} / ${state.livestock.feedCapacity}　卵 ${state.livestock.eggs} / ${state.livestock.eggCapacity}\n飼育 ${state.workers.poultryCaretaker.status}`);
     this.tillText.setText(`売上  ${state.economy.tillCoins}`);
     this.walletText.setText(`コイン  ${state.economy.walletCoins}`);

@@ -11,6 +11,9 @@ import type { LandExpansionState } from "../logic/landExpansion";
 import type { LivestockInventory } from "../logic/livestock";
 import { createContractState } from "../logic/contracts";
 import type { ContractState } from "../contracts/contractTypes";
+import { createMachine, type ProcessingLandState, type ProcessingMachineState } from "../logic/processing";
+import type { ProcessingWorkerState } from "../logic/processingWorkers";
+import type { RoutingPolicyId } from "../logic/processingRouting";
 
 export interface Economy {
   walletCoins: number;
@@ -74,6 +77,16 @@ export interface GameState {
     cornFieldCrateCapacity: number;
   };
   contracts: ContractState;
+  processing: {
+    land: ProcessingLandState;
+    mill: ProcessingMachineState;
+    bakery: ProcessingMachineState;
+    millOperator: ProcessingWorkerState;
+    baker: ProcessingWorkerState;
+    routingPolicy: RoutingPolicyId;
+    rawReserves: { wheat:number; corn:number; egg:number };
+    autoSelectionRoundRobin: { mill:number; bakery:number };
+  };
   harvestedTotal: number;
   deliveredOnce: boolean;
   firstSaleCompleted: boolean;
@@ -160,6 +173,11 @@ export function createGameState(): GameState {
       cornFieldCrateCapacity: GAME_CONFIG.cornFieldCrateCapacity,
     },
     contracts: createContractState(),
+    processing: {
+      land:{yardUnlocked:false,millBuilt:false,bakeryBuilt:false}, mill:createMachine("grain-mill"), bakery:createMachine("bakery"),
+      millOperator:{hired:false,level:0,carriedResource:null,carriedAmount:0,publicStatus:"未雇用"}, baker:{hired:false,level:0,carriedResource:null,carriedAmount:0,publicStatus:"未雇用"},
+      routingPolicy:"balanced", rawReserves:{wheat:8,corn:10,egg:4}, autoSelectionRoundRobin:{mill:0,bakery:0},
+    },
     harvestedTotal: 0,
     deliveredOnce: false,
     firstSaleCompleted: false,
