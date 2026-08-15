@@ -3,10 +3,11 @@ import type { ContractState } from "../contracts/contractTypes";
 import type { ProcessingLandState, ProcessingMachineState } from "../logic/processing";
 import type { ProcessingWorkerState } from "../logic/processingWorkers";
 import type { RoutingPolicyId } from "../logic/processingRouting";
+import type { CollectionNetwork } from "../logic/collectionNetwork";
 
 export const SAVE_FORMAT = "hurry-go-round-save" as const;
-export const SAVE_SCHEMA_VERSION = 3 as const;
-export const GAME_VERSION = "0.9.0";
+export const SAVE_SCHEMA_VERSION = 4 as const;
+export const GAME_VERSION = "0.9.1";
 
 export interface PersistedSettings {
   textScale: 1 | 1.15 | 1.3;
@@ -109,6 +110,7 @@ export interface PersistedGameSnapshot {
   crops: PersistedCropSnapshot[];
   contracts: ContractState;
   processing: { land:ProcessingLandState; mill:ProcessingMachineState; bakery:ProcessingMachineState; millOperator:ProcessingWorkerState; baker:ProcessingWorkerState; routingPolicy:RoutingPolicyId; rawReserves:{wheat:number;corn:number;egg:number}; autoSelectionRoundRobin:{mill:number;bakery:number} };
+  collectionNetwork: CollectionNetwork;
   progression: Record<string, boolean>;
   statistics: { harvestedTotal: number };
   playTimeMs: number;

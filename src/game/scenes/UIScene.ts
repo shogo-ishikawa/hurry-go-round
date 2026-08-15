@@ -45,12 +45,12 @@ export class UIScene extends Phaser.Scene {
       color: "#49382e",
       fontStyle: "bold",
     };
-    this.carriedText = this.add.text(27, 20, "背負い籠\n空", style);
+    this.carriedText = this.add.text(27, 20, "持ち物\n空", style);
     this.barnText = this.add.text(27, 52, "倉庫\n麦 0", style);
     this.marketText = this.add.text(0, 0, "売り場\n麦 0 / 8", style);
     this.tillText = this.add.text(0, 0, "売上  0", style);
     this.walletText = this.add.text(0, 0, "コイン  0", style);
-    this.versionText = this.add.text(0, 0, "v0.9.0", {
+    this.versionText = this.add.text(0, 0, "v0.9.1", {
       ...style,
       fontSize: "14px",
       color: "#755c49",
@@ -67,7 +67,7 @@ export class UIScene extends Phaser.Scene {
     this.livestockText = this.add.text(0, 0, "鶏小屋\n餌 0 / 12\n卵 0 / 12", { ...style, fontSize: "16px" }).setVisible(false);
     this.contextHint = this.add.text(0, 0, "", { fontFamily: "system-ui", fontSize: "16px", color: "#fff4d8", backgroundColor: "#49382ee8", align: "center", padding: { x: 14, y: 9 }, wordWrap: { width: 340 } }).setOrigin(.5).setAlpha(0);
     this.contractButton=this.add.text(0,0,"契約を見る  E",{...style,fontSize:"17px",backgroundColor:"#297c78",color:"#fff4d8",padding:{x:18,y:13}}).setOrigin(.5).setVisible(false).setInteractive({useHandCursor:true}).on("pointerup",()=>this.openContracts());
-    this.operationsButton=this.add.text(0,0,"農場運営所  E",{...style,fontSize:"17px",backgroundColor:"#297c78",color:"#fff4d8",padding:{x:18,y:13}}).setOrigin(.5).setVisible(false).setInteractive({useHandCursor:true}).on("pointerup",()=>this.openOperations());
+    this.operationsButton=this.add.text(0,0,"研修小屋  E",{...style,fontSize:"17px",backgroundColor:"#297c78",color:"#fff4d8",padding:{x:18,y:13}}).setOrigin(.5).setVisible(false).setInteractive({useHandCursor:true}).on("pointerup",()=>this.openOperations());
     this.pauseButton=this.add.text(0,0,"一時停止",{...style,fontSize:"14px",backgroundColor:"#fff4d8",padding:{x:13,y:10}}).setOrigin(1,0).setInteractive({useHandCursor:true}).on("pointerup",()=>this.openPause());
     this.saveStatus=this.add.text(0,0,"変更なし",{...style,fontSize:"13px",backgroundColor:"#fff4d8cc",padding:{x:8,y:6}}).setOrigin(1,0);
     this.tutorial = this.add
@@ -89,7 +89,7 @@ export class UIScene extends Phaser.Scene {
       })
       .setOrigin(0.5);
     this.fullBadge = this.add
-      .text(0, 0, "背負い籠が満杯です　倉庫へ納品", {
+      .text(0, 0, "持ち物がいっぱいです　倉庫へ納品", {
         fontFamily: "system-ui",
         fontSize: "18px",
         fontStyle: "bold",
@@ -128,7 +128,7 @@ export class UIScene extends Phaser.Scene {
     if(reward){const t=this.add.text(w/2,h/2-55,`基本報酬 ${reward.base}コイン\n早期達成ボーナス ${reward.bonus}コイン\n評判 +${reward.reputation}`,{fontFamily:"system-ui",fontSize:"21px",color:"#49382e",align:"center",lineSpacing:10}).setOrigin(.5);this.overlay.push(t);this.button(w/2,h/2+120,"閉じる",()=>this.closeOverlay());return;}
     const rep=this.add.text(w/2,Math.max(70,h/2-Math.min(h-24,700)/2+75),`評判 ${state.contracts.reputation.points}　完了 ${state.contracts.statistics.contractsCompleted}`,{fontFamily:"system-ui",fontSize:"17px",color:"#49382e"}).setOrigin(.5);this.overlay.push(rep);const compact=w<700;const top=compact?145:h/2-145;state.contracts.offers.forEach((offer,i)=>{const x=compact?w/2:w/2-300+i*300,y=compact?top+i*120:top;const req=Object.entries(offer.requirements).filter(([,n])=>n>0).map(([k,n])=>`${k==="wheat"?"麦":k==="corn"?"とうもろこし":"たまご"} ${n}`).join(" / ");const card=this.add.text(x,y,`${offer.type==="priority"?"優先依頼":"契約候補"}\n${req}\n基本報酬 ${offer.baseRewardCoins}`,{fontFamily:"system-ui",fontSize:compact?"14px":"16px",color:"#49382e",backgroundColor:"#eadbb9",padding:{x:12,y:10},align:"center"}).setOrigin(.5,0);this.overlay.push(card);this.button(x-42,y+88,"受注",()=>{this.game.events.emit(GAME_EVENTS.contractAction,"accept",offer.id);this.closeOverlay();});this.button(x+45,y+88,"見送る",()=>{this.game.events.emit(GAME_EVENTS.contractAction,"decline",offer.id);this.closeOverlay();});});if(state.contracts.active){const active=this.add.text(w/2,h-125,`進行中の契約　${Object.entries(state.contracts.active.requirements).filter(([,n])=>n>0).map(([k,n])=>`${k==="wheat"?"麦":k==="corn"?"とうもろこし":"たまご"} ${state.contracts.active!.delivered[k as "wheat"]}/${n}`).join("　")}`,{fontFamily:"system-ui",fontSize:"16px",color:"#49382e"}).setOrigin(.5);this.overlay.push(active);let cancellationArmed=false;const cancelButton=this.button(w/2,h-75,"契約を中止",()=>{if(!cancellationArmed){cancellationArmed=true;cancelButton.setText("契約を中止しますか？　もう一度押す");return;}this.game.events.emit(GAME_EVENTS.contractAction,"cancel");this.closeOverlay();});}this.button(w-80,55,"閉じる",()=>this.closeOverlay());};
   private openPause=():void=>{if(this.overlay.length)return;this.overlayBase("一時停止・管理");const w=this.scale.width,h=this.scale.height;["ゲームに戻る","今すぐ保存","出荷契約","設定","セーブデータを書き出す","セーブデータを読み込む","タイトルへ戻る","農場を最初からやり直す"].forEach((label,i)=>this.button(w/2,h/2-190+i*52,label,()=>{if(label==="ゲームに戻る")this.closeOverlay();else if(label==="出荷契約"){this.closeOverlay();this.openContracts();}else this.game.events.emit(`management-${label}`);}));};
-  private openOperations=():void=>{if(this.overlay.length||!this.lastState)return;this.overlayBase("農場運営所　スタッフ・施設");const state=this.lastState,w=this.scale.width,h=this.scale.height,keys:Record<WorkerRoleId,keyof GameState["workers"]>={"wheat-harvester":"harvestWorker","wheat-transporter":"transportWorker","corn-harvester":"cornHarvestWorker","corn-transporter":"cornTransportWorker","poultry-caretaker":"poultryCaretaker"};const summary=this.add.text(w/2,h/2-Math.min(h-24,700)/2+76,`コイン ${state.economy.walletCoins}　評判 ${state.contracts.reputation.points}\n契約 ${state.contracts.active?"進行中":"なし"}`,{fontFamily:"system-ui",fontSize:"16px",color:"#49382e",align:"center"}).setOrigin(.5,0);this.overlay.push(summary);const compact=h<600;WORKER_ROLE_IDS.forEach((role,index)=>{const worker=state.workers[keys[role]],definition=WORKER_ROLES[role],cost=worker.hired?getWorkerTrainingCost(role,worker.level):definition.hireCost,label=worker.hired?`Lv${worker.level}　${worker.status}`:"未雇用",x=w/2,y=(compact?130:170)+index*(compact?70:82);const card=this.add.text(x-80,y,`${definition.publicName}\n${label}　${cost===null?"最大レベル":`${cost}コイン`}`,{fontFamily:"system-ui",fontSize:compact?"13px":"15px",color:"#49382e",backgroundColor:"#eadbb9",padding:{x:12,y:8},fixedWidth:Math.min(500,w-150)}).setOrigin(.5);this.overlay.push(card);this.button(x+Math.min(270,w/2-55),y,worker.hired?(cost===null?"最大":"研修"):"雇用",()=>{if(cost!==null)this.game.events.emit(GAME_EVENTS.operationsAction,worker.hired?"train":"hire",role);this.closeOverlay();});});this.button(w-75,50,"閉じる",()=>this.closeOverlay());};
+  private openOperations=():void=>{if(this.overlay.length||!this.lastState)return;this.overlayBase("研修小屋　スタッフ管理");const state=this.lastState,w=this.scale.width,h=this.scale.height,keys:Record<WorkerRoleId,keyof GameState["workers"]>={"wheat-harvester":"harvestWorker","wheat-transporter":"transportWorker","corn-harvester":"cornHarvestWorker","corn-transporter":"cornTransportWorker","poultry-caretaker":"poultryCaretaker"};const summary=this.add.text(w/2,h/2-Math.min(h-24,700)/2+76,`コイン ${state.economy.walletCoins}　評判 ${state.contracts.reputation.points}\n契約 ${state.contracts.active?"進行中":"なし"}`,{fontFamily:"system-ui",fontSize:"16px",color:"#49382e",align:"center"}).setOrigin(.5,0);this.overlay.push(summary);const compact=h<600;WORKER_ROLE_IDS.forEach((role,index)=>{const worker=state.workers[keys[role]],definition=WORKER_ROLES[role],cost=worker.hired?getWorkerTrainingCost(role,worker.level):definition.hireCost,label=worker.hired?`Lv${worker.level}　${worker.status}`:"未雇用",x=w/2,y=(compact?130:170)+index*(compact?70:82);const card=this.add.text(x-80,y,`${definition.publicName}\n${label}　${cost===null?"最大レベル":`${cost}コイン`}`,{fontFamily:"system-ui",fontSize:compact?"13px":"15px",color:"#49382e",backgroundColor:"#eadbb9",padding:{x:12,y:8},fixedWidth:Math.min(500,w-150)}).setOrigin(.5);this.overlay.push(card);this.button(x+Math.min(270,w/2-55),y,worker.hired?(cost===null?"最大":"研修"):"雇用",()=>{if(cost!==null)this.game.events.emit(GAME_EVENTS.operationsAction,worker.hired?"train":"hire",role);this.closeOverlay();});});this.button(w-75,50,"閉じる",()=>this.closeOverlay());};
   private closeOverlay():void{for(const item of this.overlay)item.destroy();this.overlay=[];this.scene.resume("game");}
   getDirection(): Point {
     return this.joystick?.direction ?? { x: 0, y: 0 };
@@ -143,7 +143,7 @@ export class UIScene extends Phaser.Scene {
   private updateState(state: GameState): void {
     this.lastState = state;
     const carried = state.cargo; const total = getCarriedTotal(carried);
-    this.carriedText.setText(total ? `背負い籠　${total} / ${carried.capacity}\n麦${carried.amounts.wheat}　とう${carried.amounts.corn}　卵${carried.amounts.egg}` : `背負い籠\n空　0 / ${carried.capacity}`);
+    this.carriedText.setText(total ? `持ち物　${total} / ${carried.capacity}\n麦${carried.amounts.wheat}　とう${carried.amounts.corn}　卵${carried.amounts.egg}` : `持ち物\n空　0 / ${carried.capacity}`);
     const unlocked = state.landExpansion;
     this.barnText.setText(["倉庫", `麦 ${state.barn.wheat}`, unlocked.eastCornFieldUnlocked ? `とうもろこし ${state.barn.corn}` : "", unlocked.southChickenCoopUnlocked ? `たまご ${state.barn.egg}` : "", state.processing.land.millBuilt ? `小麦粉 ${state.barn.flour}　コーンミール ${state.barn.cornmeal}` : "", state.processing.land.bakeryBuilt ? `パン ${state.barn.bread}　コーンブレッド ${state.barn.cornbread}` : ""].filter(Boolean).join("\n"));
     this.marketText.setText(["売り場", `麦 ${state.market.wheat} / 8`, unlocked.eastCornFieldUnlocked ? `とうもろこし ${state.market.corn} / 8` : "", unlocked.southChickenCoopUnlocked ? `たまご ${state.market.egg} / 8` : "", state.processing.land.millBuilt ? `小麦粉 ${state.market.flour}/6　コーンミール ${state.market.cornmeal}/6` : "", state.processing.land.bakeryBuilt ? `パン ${state.market.bread}/6　コーンブレッド ${state.market.cornbread}/4` : ""].filter(Boolean).join("\n"));
@@ -199,7 +199,7 @@ export class UIScene extends Phaser.Scene {
   private updateTutorial(stage: number): void {
     const messages = [
       "麦畑へ移動しましょう",
-      "麦を収穫して背負い籠を満たしましょう",
+      "麦を収穫して持ち物へ加えましょう",
       "倉庫へ納品しましょう",
       "納品を続けましょう",
       "市場の棚に麦が並びます",

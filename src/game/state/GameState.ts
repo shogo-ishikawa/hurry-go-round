@@ -14,6 +14,7 @@ import type { ContractState } from "../contracts/contractTypes";
 import { createMachine, type ProcessingLandState, type ProcessingMachineState } from "../logic/processing";
 import type { ProcessingWorkerState } from "../logic/processingWorkers";
 import type { RoutingPolicyId } from "../logic/processingRouting";
+import { createCollectionNetwork, type CollectionNetwork } from "../logic/collectionNetwork";
 
 export interface Economy {
   walletCoins: number;
@@ -87,6 +88,7 @@ export interface GameState {
     rawReserves: { wheat:number; corn:number; egg:number };
     autoSelectionRoundRobin: { mill:number; bakery:number };
   };
+  collectionNetwork: CollectionNetwork;
   harvestedTotal: number;
   deliveredOnce: boolean;
   firstSaleCompleted: boolean;
@@ -178,6 +180,7 @@ export function createGameState(): GameState {
       millOperator:{hired:false,level:0,carriedResource:null,carriedAmount:0,publicStatus:"未雇用"}, baker:{hired:false,level:0,carriedResource:null,carriedAmount:0,publicStatus:"未雇用"},
       routingPolicy:"balanced", rawReserves:{wheat:8,corn:10,egg:4}, autoSelectionRoundRobin:{mill:0,bakery:0},
     },
+    collectionNetwork:createCollectionNetwork(),
     harvestedTotal: 0,
     deliveredOnce: false,
     firstSaleCompleted: false,
