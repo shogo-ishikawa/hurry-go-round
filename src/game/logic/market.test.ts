@@ -1,7 +1,15 @@
 import { describe, expect, it } from "vitest";
 import { sellWheatToCustomer, type SaleState } from "./market";
 const state = (market = 2): SaleState => ({
-  inventory: { carried: 0, barn: 3, market, capacity: 12, marketCapacity: 8 },
+  inventory: {
+    carried: 0,
+    barn: 3,
+    market,
+    fieldCrate: 0,
+    capacity: 12,
+    marketCapacity: 8,
+    fieldCrateCapacity: 16,
+  },
   economy: {
     walletCoins: 4,
     tillCoins: 1,

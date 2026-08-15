@@ -47,10 +47,6 @@ export class MarketSystem {
   private updateRestock(delta: number): void {
     this.restockTimer = Math.max(0, this.restockTimer - delta);
     const s = this.getState();
-    if (s.inventory.carried > 0) {
-      this.restockTimer = GAME_CONFIG.marketRestockIntervalMs;
-      return;
-    }
     if (
       this.restockTimer > 0 ||
       s.inventory.barn <= 0 ||

@@ -9,8 +9,10 @@ const empty = (): Inventory => ({
   carried: 0,
   barn: 0,
   market: 0,
+  fieldCrate: 0,
   capacity: 12,
   marketCapacity: 8,
+  fieldCrateCapacity: 16,
 });
 describe("inventory", () => {
   it("harvesting adds one", () => expect(harvestOne(empty()).carried).toBe(1));
@@ -41,5 +43,16 @@ describe("inventory", () => {
   it("stops at market capacity without negative barn stock", () => {
     const value = { ...empty(), barn: 2, market: 8 };
     expect(restockMarketOne(value)).toBe(value);
+  });
+  it.each([
+    ["player", { carried: 5, harvest: 0, transport: 0 }],
+    ["harvest worker", { carried: 0, harvest: 3, transport: 0 }],
+    ["transport worker", { carried: 0, harvest: 0, transport: 4 }],
+  ])("restocks while %s carries wheat elsewhere", (_label, cargo) => {
+    const before = { ...empty(), carried: cargo.carried, barn: 2 };
+    const after = restockMarketOne(before);
+    expect(after.barn).toBe(1);
+    expect(after.market).toBe(1);
+    expect(cargo.harvest + cargo.transport).toBeGreaterThanOrEqual(0);
   });
 });

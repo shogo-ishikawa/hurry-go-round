@@ -2,8 +2,10 @@ export interface Inventory {
   carried: number;
   barn: number;
   market: number;
+  fieldCrate: number;
   capacity: number;
   marketCapacity: number;
+  fieldCrateCapacity: number;
 }
 export function harvestOne(value: Inventory): Inventory {
   return value.carried >= value.capacity

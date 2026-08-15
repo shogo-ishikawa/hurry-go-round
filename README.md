@@ -1,30 +1,35 @@
 # Hurry-Go-Round
 
-A bright browser farm game about keeping a satisfying farm-to-market circuit moving. **v0.3.0 — Market & First Upgrade Loop** adds customers, sales, collectible earnings, and the first progression purchase to the visual harvest prototype.
+A bright browser farm game about keeping a satisfying farm-to-market circuit moving. **v0.4.0 — Workers & Automation Loop** adds two staged labor hires while preserving the complete manual harvest, market, coin, and harvest-speed-upgrade loop.
 
-## Current gameplay loop
+## Current gameplay
 
-1. Approach mature wheat to harvest automatically and fill the farmer’s visible 12-slot pack.
-2. Enter the barn delivery platform to unload one bundle at a time.
-3. The barn restocks the eight-slot market shelf one unit at a time.
-4. Customers arrive, form a FIFO queue, wait for stock, and buy one wheat for two coins.
-5. Sales accumulate as a physical coin pile at the market till rather than entering the wallet directly.
-6. Enter the marked cash zone to collect coins one at a time.
-7. Hold position on the Harvest Speed pad to purchase faster harvesting for 20, then 55 coins.
+The player may continue to harvest wheat manually, carry 12 visible bundles, unload at the barn, stock the market, serve queued customers, collect till coins, and purchase harvest-speed levels.
 
-The 2000 × 1400 farm retains its looping path, two wheat plots, crop depletion and staged regrowth, barn, pond, fences, trees, flowers, and original vector-like farmer. Market stock, till earnings, wallet coins, and upgrade state share one authoritative game state.
+Automation is optional and visible:
 
-The public game interface is presented in Japanese. Delivery, cash collection, and upgrade purchase areas use filled ground zones, heavy outlines, and Japanese labels that match their actual interaction radii.
+1. Earn coins through the manual market loop.
+2. Hire the harvest worker for **40 coins** by remaining on the hiring station for 900 ms.
+3. The harvest worker follows fixed safe farm waypoints, harvests ready wheat, carries up to four bundles, and deposits them one at a time into the **16-unit field collection crate**.
+4. Enter the crate’s 95-unit pickup area to transfer its wheat into the player’s pack every 160 ms, then deliver it manually if desired.
+5. Earn another **75 coins** and hire the unlocked transport worker.
+6. The transport worker loads up to six crate bundles, follows the fixed farm route to the barn, unloads one at a time, and returns to repeat the cycle.
+
+The market continues restocking from the barn regardless of wheat carried by the player or either worker. Customer sales and cash collection continue during automation.
+
+## Japanese public interface
+
+All public gameplay labels, tutorial messages, worker statuses, interaction zones, affordability feedback, and purchase messages are Japanese. The game title **Hurry-Go-Round** and version number remain in English.
 
 ## Controls and responsive behavior
 
-- **WASD / arrow keys:** direct movement; this cancels a point destination.
-- **Virtual joystick:** available on desktop, mobile, and tablet; dragging it cancels point movement.
-- **Click or tap:** move toward a marked destination and stop on arrival.
-- **Drag outside the joystick:** use the pointer-down position as a temporary control origin and keep moving in the dragged direction while held. Releasing stops the farmer rather than leaving a point destination.
-- Harvesting, barn unloading, market restocking, sales, cash collection, and upgrade purchasing are automatic.
+- **WASD / arrow keys:** direct movement and cancellation of a point destination.
+- **Virtual joystick:** always available on desktop, mobile, and tablet.
+- **Click or tap:** set a visible movement destination.
+- **Drag:** continuously retarget the active destination.
+- Harvesting, unloading, restocking, customer purchases, cash pickup, hiring, crate pickup, and worker transfers are automatic proximity interactions.
 
-The Phaser canvas uses `RESIZE`; responsive camera zoom updates on rotation or resize. HUD regions are excluded from both point and drag navigation. Desktop places inventory and economy panels on opposite sides; narrow portrait stacks them above the lower-left joystick and displays a one-time landscape suggestion.
+The Phaser canvas keeps `RESIZE` scaling and responsive camera zoom. Inventory, economy, automation, tutorial, and joystick regions are excluded from point navigation. Narrow portrait layouts use compact Japanese automation labels without blocking the joystick.
 
 ## Setup and commands
 
@@ -43,26 +48,28 @@ npm run dev
 | `npm test`          | Run deterministic Vitest tests once.   |
 | `npm run check`     | Run type checking and all tests.       |
 
-## Project structure
+## Architecture
 
 ```text
 src/game/
-├── art/          palette, terrain, farm and bounded effects
-├── config/       centralized gameplay and economy parameters
-├── entities/     farmer, crops, market, customers, and upgrade pad
-├── input/        joystick and tested responsive reserved-region layout
-├── logic/        pure movement, pointer control, crops, inventory, market, queue, economy, upgrades
-├── scenes/       world owner and camera-independent responsive UI
-├── state/        authoritative game state and event contract
-└── systems/      market/customer/cash and upgrade runtime orchestration
+├── art/          shared palette, terrain, and bounded effects
+├── config/       centralized game, economy, crate, and worker balance
+├── entities/     farmer, crops, market, crate, hiring pads, and workers
+├── input/        joystick and tested responsive reserved layout
+├── logic/        deterministic inventory, market, hiring, and worker transfers
+├── routes/       immutable static worker waypoints
+├── scenes/       game-state owner and camera-independent Japanese UI
+├── state/        authoritative economy, inventory, and worker state
+└── systems/      market, upgrade, hiring, and worker finite-state orchestration
 docs/
 ├── ART_DIRECTION.md
 ├── V0.1.0_SPEC.md
 ├── V0.2.0_SPEC.md
-└── V0.3.0_SPEC.md
+├── V0.3.0_SPEC.md
+└── V0.4.0_SPEC.md
 ```
 
-Phaser supplies rendering, input, cameras, timing, and bounded tweens. Transaction, pointer-direction, and layout rules are deterministic TypeScript functions tested without Phaser. All visuals are original local vector primitives; there are no remote assets, services, fonts, APIs, or tracking.
+Worker entities render position, animation, cargo, and status, while all persistent inventory, hiring, and currency values remain in `GameState`. Pure functions complete logical transfers before bounded visual tweens represent them.
 
 ## GitHub Pages
 
@@ -71,8 +78,8 @@ npm run check
 npm run build
 ```
 
-Vite’s base remains `/hurry-go-round/`, matching `https://<github-owner>.github.io/hurry-go-round/`. Pull requests run CI, and pushes to `main` deploy the generated `dist/` artifact through GitHub Actions. Do not commit `dist/` or `node_modules/`.
+Vite’s base remains `/hurry-go-round/`, matching `https://<github-owner>.github.io/hurry-go-round/`. Pull requests run CI and pushes to `main` deploy `dist/` through GitHub Actions. Do not commit `dist/` or `node_modules/`.
 
 ## Intentionally deferred
 
-Workers, automatic transport or harvesting, cashiers, obstacle pathfinding, navigation meshes, land expansion, more crops, animals, processing, recipes, multiple stores, customization, saves, IndexedDB, PWA installation, service workers, offline progression, audio, accounts, cloud synchronization, rankings, achievements, advertising, payments, external APIs, and multiplayer are outside v0.3.0.
+More workers, worker upgrades or skins, salaries, fatigue, happiness, cashiers, automated cash pickup, pathfinding, navigation meshes, land expansion, other crops, animals, processing, crafting, recipes, multiple markets, saves, IndexedDB, localStorage, PWA installation, service workers, offline progression, audio, accounts, cloud synchronization, rankings, advertisements, payments, external APIs, and multiplayer are outside v0.4.0.

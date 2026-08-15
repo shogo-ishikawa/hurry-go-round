@@ -32,3 +32,7 @@ Rendering and gameplay state remain separate. Replacement art should preserve ea
 ## Market additions
 
 Market structures reuse ochre wood, cream cloth, terracotta stripes, golden wheat, and teal interaction rings. Customers share the farmer's rounded proportions while four palette-driven clothing, hair, hat, and bag combinations keep the queue readable. Coins use warm gold with ochre outlines; empty shelf trays and queue rings remain visible at low opacity so capacity and flow stay legible.
+
+## Automation additions
+
+The harvest worker uses olive headwear and warm work clothes; the transport worker uses blue workwear and a readable two-wheel carrier. Their silhouettes, cargo, and Japanese status plaques remain distinct from the teal-overall farmer. The collection crate uses sixteen small physical shelf positions, and hiring/pickup rings appear only on interactive areas. Worker routes follow authored farm waypoints rather than general pathfinding.
