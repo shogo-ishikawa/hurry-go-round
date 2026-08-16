@@ -7,7 +7,7 @@ import type { CollectionNetwork } from "../logic/collectionNetwork";
 import type { DairyState } from "../logic/dairy";
 
 export const SAVE_FORMAT = "hurry-go-round-save" as const;
-export const SAVE_SCHEMA_VERSION = 6 as const;
+export const SAVE_SCHEMA_VERSION = 7 as const;
 export const GAME_VERSION = "0.9.4";
 
 export interface PersistedSettings {
@@ -55,6 +55,7 @@ export interface PersistedGameSnapshot {
     contractCoinsEarned: number;
   };
   landExpansion: {
+    wheatFieldLevel: 0 | 1 | 2;
     eastCornFieldUnlocked: boolean;
     southChickenCoopUnlocked: boolean;
     /** Optional so existing schema-2 v0.8.0 saves remain valid. */

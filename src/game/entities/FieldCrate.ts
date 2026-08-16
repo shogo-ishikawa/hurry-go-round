@@ -1,6 +1,7 @@
 import Phaser from "phaser";
 import { palette } from "../art/palette";
 import { GAME_CONFIG } from "../config/gameConfig";
+import { FARM_LAYOUT } from "../config/farmLayout";
 export class FieldCrate extends Phaser.GameObjects.Container {
   private fill: Phaser.GameObjects.Graphics;
   private full: Phaser.GameObjects.Text;
@@ -55,7 +56,7 @@ export class FieldCrate extends Phaser.GameObjects.Container {
       })
       .setOrigin(0.5)
       .setVisible(false);
-    super(scene, GAME_CONFIG.fieldCrate.x, GAME_CONFIG.fieldCrate.y, [
+    super(scene, FARM_LAYOUT.wheatCrate.x, FARM_LAYOUT.wheatCrate.y, [
       zone,
       art,
       fill,
@@ -69,11 +70,11 @@ export class FieldCrate extends Phaser.GameObjects.Container {
     this.setDepth(this.y + 60);
     this.updateDisplay(0);
   }
-  updateDisplay(count: number): void {
+  updateDisplay(count: number, capacity = 16): void {
     if (count === this.shown) return;
     this.shown = count;
     const g = this.fill.clear();
-    for (let i = 0; i < 16; i++) {
+    for (let i = 0; i < capacity; i++) {
       const x = -68 + (i % 8) * 19,
         y = 2 + Math.floor(i / 8) * 24;
       g.lineStyle(1, palette.outline, 0.4)
@@ -84,6 +85,6 @@ export class FieldCrate extends Phaser.GameObjects.Container {
         .fillRoundedRect(x - 7, y - 6, 14, 12, 3)
         .strokeRoundedRect(x - 7, y - 6, 14, 12, 3);
     }
-    this.full.setVisible(count >= 16);
+    this.full.setVisible(count >= capacity);
   }
 }

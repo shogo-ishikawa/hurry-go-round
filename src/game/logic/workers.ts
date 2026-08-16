@@ -61,6 +61,20 @@ export function depositHarvestWorkerCargoOne(
     true,
   );
 }
+export interface BatchDepositResult extends TransferResult { transferred: number; outcome: "deposited"|"partial"|"crate-full"|"empty" }
+export function depositHarvestWorkerBatch(s:AutomationState):BatchDepositResult{
+ const available=Math.max(0,s.inventory.fieldCrateCapacity-s.inventory.fieldCrate), transferred=Math.min(s.harvestWorker.carried,available);
+ if(s.harvestWorker.carried<=0)return{state:s,changed:false,transferred:0,outcome:"empty"};
+ if(transferred<=0)return{state:s,changed:false,transferred:0,outcome:"crate-full"};
+ return{state:{...s,inventory:{...s.inventory,fieldCrate:s.inventory.fieldCrate+transferred},harvestWorker:{...s.harvestWorker,carried:s.harvestWorker.carried-transferred}},changed:true,transferred,outcome:transferred<s.harvestWorker.carried?"partial":"deposited"};
+}
+export type ClusterNode={id:string;cluster:"west"|"central";x:number;y:number;ready:boolean};
+export const selectWheatFieldCluster=(nodes:readonly ClusterNode[],x:number,y:number,current?:ClusterNode["cluster"]):ClusterNode["cluster"]|null=>{
+ const ready=nodes.filter(n=>n.ready);if(!ready.length)return null;if(current&&ready.some(n=>n.cluster===current))return current;
+ return ready.reduce((best,n)=>Math.hypot(n.x-x,n.y-y)<Math.hypot(best.x-x,best.y-y)?n:best).cluster;
+};
+export const selectNextWheatNodeInCluster=(nodes:readonly ClusterNode[],cluster:ClusterNode["cluster"],x:number,y:number)=>nodes.filter(n=>n.ready&&n.cluster===cluster).sort((a,b)=>Math.hypot(a.x-x,a.y-y)-Math.hypot(b.x-x,b.y-y)||a.id.localeCompare(b.id))[0];
+export const shouldWheatWorkerReturnToCrate=(cargo:number,capacity:number,readyInCluster:number,emptyElapsedMs:number,graceMs=600)=>cargo>0&&(cargo>=capacity||(readyInCluster===0&&emptyElapsedMs>=graceMs));
 export function playerCollectFromFieldCrateOne(
   s: AutomationState,
 ): TransferResult {
