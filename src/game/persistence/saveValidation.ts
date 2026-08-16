@@ -174,6 +174,7 @@ export function validateSnapshot(
 
   if (
     !object(snapshot.landExpansion) ||
+    !([0,1,2].includes(snapshot.landExpansion.wheatFieldLevel)) ||
     typeof snapshot.landExpansion.eastCornFieldUnlocked !== "boolean" ||
     typeof snapshot.landExpansion.southChickenCoopUnlocked !== "boolean" ||
     (snapshot.landExpansion.cornFieldLevel !== undefined &&

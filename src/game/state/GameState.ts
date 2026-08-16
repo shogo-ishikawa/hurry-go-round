@@ -16,6 +16,7 @@ import type { ProcessingWorkerState } from "../logic/processingWorkers";
 import type { RoutingPolicyId } from "../logic/processingRouting";
 import { createCollectionNetwork, type CollectionNetwork } from "../logic/collectionNetwork";
 import { createDairyState, type DairyState } from "../logic/dairy";
+import { getWheatFieldCrateCapacity } from "../logic/wheatFieldExpansion";
 
 export interface Economy {
   walletCoins: number;
@@ -111,7 +112,7 @@ export function createGameState(): GameState {
       fieldCrate: 0,
       capacity: GAME_CONFIG.carryCapacity,
       marketCapacity: GAME_CONFIG.marketShelfCapacity,
-      fieldCrateCapacity: GAME_CONFIG.fieldCrateCapacity,
+      fieldCrateCapacity: getWheatFieldCrateCapacity(0),
     },
     cargo: createCarriedCargo(GAME_CONFIG.carryCapacity),
     barn: emptyResourceAmounts(),
@@ -119,6 +120,7 @@ export function createGameState(): GameState {
     marketCapacity: { ...RESOURCE_MARKET_CAPACITIES },
     soldByResource: emptyResourceAmounts(),
     landExpansion: {
+      wheatFieldLevel: 0,
       eastCornFieldUnlocked: false,
       southChickenCoopUnlocked: false,
       cornFieldLevel: 0,

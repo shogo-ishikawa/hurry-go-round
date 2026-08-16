@@ -3,13 +3,15 @@ import { palette } from '../art/palette';
 import { advanceCrop, harvestCrop, type CropModel } from '../logic/crops';
 
 export class CropNode extends Phaser.GameObjects.Container {
+  readonly cropId: string;
+  readonly cluster: "west" | "central";
   model: CropModel;
   private art: Phaser.GameObjects.Graphics;
   private swayOffset: number;
 
-  constructor(scene: Phaser.Scene, x: number, y: number, regrowMs: number, index: number) {
+  constructor(scene: Phaser.Scene, x: number, y: number, regrowMs: number, index: number, cropId = `wheat-legacy-${index}`, cluster: "west" | "central" = "central") {
     const art = scene.add.graphics(); super(scene, x, y, [art]); scene.add.existing(this);
-    this.art = art; this.model = { state: 'ready', elapsedMs: 0, regrowMs };
+    this.art = art; this.cropId = cropId; this.cluster = cluster; this.model = { state: 'ready', elapsedMs: 0, regrowMs };
     this.swayOffset = index * 0.71; this.draw(); this.setDepth(y);
   }
   harvest(): boolean {

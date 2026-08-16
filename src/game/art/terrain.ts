@@ -3,6 +3,7 @@ import { palette } from "./palette";
 import { GAME_CONFIG } from "../config/gameConfig";
 import { WorldSign } from "../entities/WorldSign";
 import { UI_TEXT } from "../config/localization";
+import { FARM_LAYOUT } from "../config/farmLayout";
 
 function tree(scene: Phaser.Scene, x: number, y: number, scale = 1): void {
   const c = scene.add.container(x, y).setDepth(y + 70);
@@ -75,10 +76,8 @@ export function createFarmWorld(scene: Phaser.Scene): void {
     .fillCircle(290, 1035, 14)
     .fillCircle(575, 1128, 17);
   // three soil plots and furrows
-  const plots = [
-    { x: 290, y: 265, w: 560, h: 310 },
-    { x: 760, y: 885, w: 590, h: 300 },
-  ];
+  const plots = Object.values(FARM_LAYOUT.wheatFields).map(field=>({x:field.bounds.x,y:field.bounds.y,w:field.bounds.width,h:field.bounds.height}));
+  g.fillStyle(palette.pathLight,.85).fillRoundedRect(FARM_LAYOUT.farmPath.x,FARM_LAYOUT.farmPath.y,FARM_LAYOUT.farmPath.width,FARM_LAYOUT.farmPath.height,30);
   for (const p of plots) {
     g.fillStyle(palette.soilDark, 0.25).fillRoundedRect(
       p.x + 10,
@@ -94,13 +93,13 @@ export function createFarmWorld(scene: Phaser.Scene): void {
   }
   // fences
   g.lineStyle(10, palette.creamDark)
-    .lineBetween(230, 220, 900, 220)
-    .lineBetween(230, 220, 230, 650)
-    .lineBetween(700, 840, 1410, 840);
+    .lineBetween(35, 605, 685, 605)
+    .lineBetween(35, 605, 35, 955)
+    .lineBetween(760, 870, 1350, 870);
   g.lineStyle(3, palette.outline, 0.7)
-    .lineBetween(230, 220, 900, 220)
-    .lineBetween(230, 220, 230, 650)
-    .lineBetween(700, 840, 1410, 840);
+    .lineBetween(35, 605, 685, 605)
+    .lineBetween(35, 605, 35, 955)
+    .lineBetween(760, 870, 1350, 870);
   for (const x of [230, 360, 490, 620, 750, 880])
     g.fillStyle(palette.creamDark).fillRoundedRect(x - 7, 202, 14, 40, 4);
   // flower clusters

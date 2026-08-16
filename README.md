@@ -90,9 +90,9 @@ GitHub Pages用のVite baseは `/hurry-go-round/` です。`dist/` と `node_mod
 
 ## v0.8.0 の運営機能
 
-西側に移設した **研修小屋** の入口で E / Space または画面の操作ボタンを押すと、5人のスタッフの雇用状況、作業状態、レベル、正確な雇用・研修費用を確認できます。現地の雇用パッドも引き続き利用でき、どちらも同じ取引判定を使います。とうもろこし収穫・運搬スタッフと飼育スタッフは、作物・集荷箱・倉庫・餌箱・卵置き場の間を実際に移動します。
+上段の旧麦畑へ移設した **研修小屋** の入口で E / Space または画面の操作ボタンを押すと、5人のスタッフの雇用状況、作業状態、レベル、正確な雇用・研修費用を確認できます。現地の雇用パッドも引き続き利用でき、どちらも同じ取引判定を使います。とうもろこし収穫・運搬スタッフと飼育スタッフは、作物・集荷箱・倉庫・餌箱・卵置き場の間を実際に移動します。
 
-セーブ形式はschema 6です。v0.9.3では牧草地（1,000コイン、24→36→48区画）、牛舎（1,400コイン、最大3頭）、牛乳、乳製品工房、バター、チーズ、酪農スタッフを追加します。schema 3の加工・契約・スタッフ状態を保ったまま、集配ネットワークを追加します。schema 2の資源・契約・とうもろこし畑レベルを保ったまま、4種類の加工品と加工場状態を追加します。既存のschema-2セーブでは、とうもろこし畑の拡張レベルが未記録の場合にレベル0として読み込みます。v0.7.0の有効なschema-1セーブとJSON書き出しも、起動または読み込み時に自動移行されます。
+セーブ形式はschema 7です。v0.9.3では牧草地（1,000コイン、24→36→48区画）、牛舎（1,400コイン、最大3頭）、牛乳、乳製品工房、バター、チーズ、酪農スタッフを追加します。schema 3の加工・契約・スタッフ状態を保ったまま、集配ネットワークを追加します。schema 2の資源・契約・とうもろこし畑レベルを保ったまま、4種類の加工品と加工場状態を追加します。既存のschema-2セーブでは、とうもろこし畑の拡張レベルが未記録の場合にレベル0として読み込みます。v0.7.0の有効なschema-1セーブとJSON書き出しも、起動または読み込み時に自動移行されます。
 
 ## 今回実装しないもの
 
@@ -111,3 +111,7 @@ GitHub Pages用のVite baseは `/hurry-go-round/` です。`dist/` と `node_mod
 ### v0.9.4 collection runtime
 
 After the processing yard is unlocked, the collection hub and the wheat, corn, and egg collection boxes can be built in the world. Stand at a box to deposit matching cargo or recover it from the lower pickup side. Open the hub with **E** or its touch button to hire/train the courier, change routing, inspect capacity, or perform an emergency barn transfer. The courier moves visibly between facilities and sends batches to a usable processing machine, falling back to the barn when processing cannot accept them.
+
+## v0.9.5 開発版 — Phase 1
+
+麦の収穫スタッフは研修レベルごとの移動・収穫速度と4・7・10個の運搬容量を使い、同じ畑の麦をまとめて収穫して集荷箱へ一括納品します。研修小屋は旧上段麦畑へ、麦畑は西側の旧小屋跡と従来の中央区画へ配置しました。麦畑は30・42・54株、集荷箱は16・24・32個へ2段階（220・520コイン）で拡張できます。開発中の保存形式はschema 7で、schema 6の30株を安定した新IDへ移行します。
