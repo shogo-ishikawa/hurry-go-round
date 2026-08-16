@@ -35,6 +35,7 @@ import { INTERACTIONS } from "../logic/facilities";
 import { createWorkerProgress, hireWorkerByRole, trainWorker, type WorkerRoleId } from "../logic/workforce";
 import { advanceCows, advanceDairyCycle, startDairyCycle } from "../logic/dairy";
 import { ProcessingSystem } from "../systems/ProcessingSystem";
+import { CollectionNetworkSystem } from "../systems/CollectionNetworkSystem";
 export class GameScene extends Phaser.Scene {
   private farmer!: Farmer;
   private crops: CropNode[] = [];
@@ -67,6 +68,7 @@ export class GameScene extends Phaser.Scene {
   private contractKey!: Phaser.Input.Keyboard.Key;
   private operationsInRange=false;
   private processingSystem!:ProcessingSystem;
+  private collectionSystem!:CollectionNetworkSystem;
   constructor() {
     super("game");
   }
@@ -128,6 +130,7 @@ export class GameScene extends Phaser.Scene {
     );
     this.expansion = new ExpansionSystem(this, this.farmer, () => this.state, (s) => this.setState(s));
     this.expandedAutomation = new ExpandedAutomationSystem(this, this.farmer, () => this.state, (s) => this.setState(s));
+    this.collectionSystem=new CollectionNetworkSystem(this,this.farmer,()=>this.state,(state)=>{this.state=state;},this.contractKey);
     this.processingSystem=new ProcessingSystem(this,this.farmer,()=>this.state,(state)=>{this.state=state;},this.contractKey);
     this.scene.launch("ui");
     this.time.delayedCall(0, () => {
@@ -177,6 +180,7 @@ export class GameScene extends Phaser.Scene {
     this.workers.update(delta);
     this.expansion.update(delta);
     this.expandedAutomation.update(delta);
+    this.collectionSystem.update(delta);
     this.processingSystem.update(delta);
     this.updateDairy(delta);
     this.updateContracts(delta);
@@ -399,6 +403,7 @@ export class GameScene extends Phaser.Scene {
   }
   private cleanup(): void {
     this.processingSystem?.destroy();
+    this.collectionSystem?.destroy();
     this.input.off("pointerdown", this.beginPointer, this);
     this.input.off("pointermove", this.updatePointerDrag, this);
     this.input.off("pointerup", this.endPointer, this);

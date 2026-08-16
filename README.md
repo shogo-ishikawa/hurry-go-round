@@ -107,3 +107,7 @@ GitHub Pages用のVite baseは `/hurry-go-round/` です。`dist/` と `node_mod
 ## v0.9.3 の牧草地と酪農
 
 加工場の解放後に牧草地を購入し、干し草を牛へ与えると、牛1頭につき10秒で牛乳を生産します。乳製品工房では牛乳2個からバター1個、牛乳3個からチーズ1個を生産します。牛乳・バター・チーズは市場と契約へ接続され、schema 1〜4のセーブはschema 5へ移行されます。保存要求は直列化され、保存中の変更も続けて保存します。
+
+### v0.9.4 collection runtime
+
+After the processing yard is unlocked, the collection hub and the wheat, corn, and egg collection boxes can be built in the world. Stand at a box to deposit matching cargo or recover it from the lower pickup side. Open the hub with **E** or its touch button to hire/train the courier, change routing, inspect capacity, or perform an emergency barn transfer. The courier moves visibly between facilities and sends batches to a usable processing machine, falling back to the barn when processing cannot accept them.
