@@ -1,5 +1,5 @@
 import {describe,expect,it} from "vitest";
-import {advanceCows,advanceDairyCycle,buildCowBarn,buyCow,cancelDairyCycle,createDairyState,expandPasture,getDairyInputBatch,getPasturePlots,purchasePasture,selectDairyTask,startDairyCycle} from "./dairy";
+import {advanceCows,advanceDairyCycle,advancePastureNodes,harvestPastureNode,buildCowBarn,buyCow,cancelDairyCycle,createDairyState,expandPasture,getDairyInputBatch,getPasturePlots,purchasePasture,selectDairyTask,startDairyCycle} from "./dairy";
 import type {DairyState} from "./dairy";
 import {emptyResourceAmounts} from "../config/resourceDefinitions";
 describe("v0.9.3 pasture and dairy",()=>{
@@ -7,4 +7,5 @@ describe("v0.9.3 pasture and dairy",()=>{
  it("consumes hay once and produces independent milk",()=>{const cows=[{id:"cow-1",producing:false,productionRemainingMs:0,readyMilk:0,activitySeed:1},{id:"cow-2",producing:false,productionRemainingMs:0,readyMilk:0,activitySeed:2}];let r=advanceCows(cows,2,0,0);expect(r.hayRack).toBe(0);r=advanceCows(r.cows,r.hayRack,r.milkTank,10000);expect(r.milkTank).toBe(2)});
  it("reserves milk, completes recipes, and safely cancels",()=>{let s:DairyState={...createDairyState(),workshopBuilt:true,workshopLevel:1 as const,workshopInput:3,workshopMode:"cheese" as const};s=startDairyCycle(s);expect(s.cycle?.reservedMilk).toBe(3);expect(advanceDairyCycle(s,10000).workshopOutput.cheese).toBe(1);const cancelled=cancelDairyCycle(s,{...emptyResourceAmounts(),milk:4});expect(cancelled.s.workshopInput+cancelled.barn.milk).toBe(7);expect(getDairyInputBatch(7,0,1,"cheese",8)).toBe(6)});
  it("prioritizes emergency feed",()=>expect(selectDairyTask({hired:true,hayRack:5,milkTank:24,hayAvailable:2})).toBe("feed-emergency"));
+ it("regrows staggered pasture nodes and preserves ready milk while the tank is full",()=>{const nodes=createDairyState().pastureNodes;const cut=harvestPastureNode(nodes,nodes[0]!.id,true);expect(cut.harvested).toBe(true);expect(advancePastureNodes(cut.nodes,8000)[0]!.state).toBe("ready");const cow={id:"cow-1",producing:true,productionRemainingMs:1,readyMilk:0,activitySeed:1};const full=advanceCows([cow],0,24,1);expect(full.cows[0]!.readyMilk).toBe(1);expect(full.milkTank).toBe(24);expect(advanceCows(full.cows,0,23,1)).toMatchObject({milkTank:24,cows:[{readyMilk:0}]});});
 });

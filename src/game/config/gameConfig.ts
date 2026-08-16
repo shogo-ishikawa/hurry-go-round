@@ -1,6 +1,6 @@
 export const GAME_CONFIG = {
-  worldWidth: 3000,
-  worldHeight: 1900,
+  worldWidth: 4000,
+  worldHeight: 2300,
   playerInset: 42,
   playerSpeed: 270,
   carryCapacity: 12,
