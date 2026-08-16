@@ -33,9 +33,11 @@ import { createPersistedSnapshot } from "../logic/saveSnapshot";
 import { normalizeDurationMs } from "../logic/normalizePersistedSnapshot";
 import { INTERACTIONS } from "../logic/facilities";
 import { createWorkerProgress, hireWorkerByRole, trainWorker, type WorkerRoleId } from "../logic/workforce";
-import { advanceCows, advanceDairyCycle, startDairyCycle } from "../logic/dairy";
+import { advanceCows, advanceDairyCycle, advancePastureNodes, startDairyCycle } from "../logic/dairy";
+import { getUnlockedResourceIds } from "../logic/unlockedResources";
 import { ProcessingSystem } from "../systems/ProcessingSystem";
 import { CollectionNetworkSystem } from "../systems/CollectionNetworkSystem";
+import { DairySystem } from "../systems/DairySystem";
 export class GameScene extends Phaser.Scene {
   private farmer!: Farmer;
   private crops: CropNode[] = [];
@@ -69,6 +71,7 @@ export class GameScene extends Phaser.Scene {
   private operationsInRange=false;
   private processingSystem!:ProcessingSystem;
   private collectionSystem!:CollectionNetworkSystem;
+  private dairySystem!:DairySystem;
   constructor() {
     super("game");
   }
@@ -132,6 +135,7 @@ export class GameScene extends Phaser.Scene {
     this.expandedAutomation = new ExpandedAutomationSystem(this, this.farmer, () => this.state, (s) => this.setState(s));
     this.collectionSystem=new CollectionNetworkSystem(this,this.farmer,()=>this.state,(state)=>{this.state=state;},this.contractKey);
     this.processingSystem=new ProcessingSystem(this,this.farmer,()=>this.state,(state)=>{this.state=state;},this.contractKey);
+    this.dairySystem=new DairySystem(this,this.farmer,()=>this.state,(state)=>this.setState(state));
     this.scene.launch("ui");
     this.time.delayedCall(0, () => {
       this.ui = this.scene.get("ui") as UIScene;
@@ -182,11 +186,12 @@ export class GameScene extends Phaser.Scene {
     this.expandedAutomation.update(delta);
     this.collectionSystem.update(delta);
     this.processingSystem.update(delta);
+    this.dairySystem.update(delta);
     this.updateDairy(delta);
     this.updateContracts(delta);
     this.updateOperations();
   }
-  private updateDairy(delta:number):void{const cows=advanceCows(this.state.dairy.cows,this.state.dairy.hayRack,this.state.dairy.milkTank,delta);let dairy={...this.state.dairy,...cows};dairy=advanceDairyCycle(dairy,delta);dairy=startDairyCycle(dairy);this.state={...this.state,dairy};}
+  private updateDairy(delta:number):void{const cows=advanceCows(this.state.dairy.cows,this.state.dairy.hayRack,this.state.dairy.milkTank,delta);let dairy={...this.state.dairy,...cows,pastureNodes:advancePastureNodes(this.state.dairy.pastureNodes,delta)};dairy=advanceDairyCycle(dairy,delta);dairy=startDairyCycle(dairy);this.state={...this.state,dairy};}
   private updateOperations():void{const action=INTERACTIONS.find(i=>i.id==="open-operations")!,inside=Phaser.Math.Distance.Between(this.farmer.x,this.farmer.y,action.center.x,action.center.y)<=action.radius;if(inside!==this.operationsInRange){this.operationsInRange=inside;this.game.events.emit(GAME_EVENTS.operationsRange,inside);}if(inside&&(Phaser.Input.Keyboard.JustDown(this.contractKey)||Phaser.Input.Keyboard.JustDown(this.cursors.space!)))this.game.events.emit(GAME_EVENTS.operationsOpen);}
   private handleOperationsAction(action:"hire"|"train",role:WorkerRoleId):void{const keys:Record<WorkerRoleId,keyof GameState["workers"]>={"wheat-harvester":"harvestWorker","wheat-transporter":"transportWorker","corn-harvester":"cornHarvestWorker","corn-transporter":"cornTransportWorker","poultry-caretaker":"poultryCaretaker"},key=keys[role],current=this.state.workers[key],hired=new Set<WorkerRoleId>();for(const [id,k] of Object.entries(keys) as [WorkerRoleId,keyof GameState["workers"]][])if(this.state.workers[k].hired)hired.add(id);const progress=createWorkerProgress(current.hired,key==="poultryCaretaker"?this.state.workers.poultryCaretaker.resource:role.startsWith("corn")?"corn":"wheat",current.carried);const result=action==="hire"?hireWorkerByRole(role,this.state.economy.walletCoins,progress,{eastUnlocked:this.state.landExpansion.eastCornFieldUnlocked,coopUnlocked:this.state.landExpansion.southChickenCoopUnlocked,hiredRoles:hired}):trainWorker(role,this.state.economy.walletCoins,progress);if(!result.changed){this.game.events.emit(GAME_EVENTS.hint,"条件またはコインが足りません");return;}this.setState({...this.state,economy:{...this.state.economy,walletCoins:result.wallet},workers:{...this.state.workers,[key]:{...current,hired:result.worker.hired,level:result.worker.level,status:action==="hire"?"作業場所へ移動中":"研修完了"}}});this.game.events.emit(GAME_EVENTS.dirty,"priority");}
   private createContractFacilities(): void {
@@ -196,7 +201,7 @@ export class GameScene extends Phaser.Scene {
     const dock = this.add.graphics().setDepth(GAME_CONFIG.contractDock.y); dock.fillStyle(palette.shadow,.2).fillEllipse(1378,890,230,55).lineStyle(6,palette.outline).fillStyle(palette.path).fillRoundedRect(1260,780,230,105,10).strokeRoundedRect(1260,780,230,105,10).fillStyle(palette.soil).fillRoundedRect(1290,800,48,45,6).strokeRoundedRect(1290,800,48,45,6).fillRoundedRect(1350,800,48,45,6).strokeRoundedRect(1350,800,48,45,6).fillRoundedRect(1410,800,48,45,6).strokeRoundedRect(1410,800,48,45,6);
     this.add.text(1375,862,"契約出荷場",{fontFamily:"system-ui",fontSize:"17px",fontStyle:"bold",color:"#49382e",backgroundColor:"#fff4d8dd",padding:{x:8,y:4}}).setOrigin(.5).setDepth(2000);
   }
-  private unlockedResources(): ResourceId[] { return this.state.landExpansion.southChickenCoopUnlocked ? ["wheat","corn","egg"] : this.state.landExpansion.eastCornFieldUnlocked ? ["wheat","corn"] : ["wheat"]; }
+  private unlockedResources(): ResourceId[] { return getUnlockedResourceIds(this.state); }
   private updateContracts(delta: number): void {
     this.state = { ...this.state, contracts: advanceContractActiveTime(this.state.contracts, delta, false) }; this.contractCooldown = Math.max(0, this.contractCooldown-delta);
     if(this.state.contracts.active){this.contractDirtyElapsed+=delta;if(this.contractDirtyElapsed>=1000){this.contractDirtyElapsed=0;this.game.events.emit(GAME_EVENTS.dirty);}}
