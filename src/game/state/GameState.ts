@@ -211,5 +211,8 @@ export const GAME_EVENTS = {
   processingRange: "processing-range",
   processingOpen: "processing-open",
   processingAction: "processing-action",
+  collectionRange: "collection-range",
+  collectionOpen: "collection-open",
+  collectionAction: "collection-action",
   dirty: "persistent-state-dirty",
 } as const;

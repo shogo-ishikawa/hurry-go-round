@@ -267,3 +267,7 @@ v0.9.4は、次がGitHub Pages上で確認できるまで公開完了としま�
 9. コンソールエラーがない
 10. 30分相当の連続シミュレーションで負数・二重生成・停止がない
 ```
+
+## Phase 3 implementation
+
+The collection network is now connected to the playable runtime. After purchasing the processing yard, players can build the collection hub and resource-specific boxes, deposit or recover matching cargo, hire and train a visible courier, select routing, and deliver batches to the processing intake or barn. Collection construction, inventories, courier progress, and routing continue through the existing v0.9.4 save snapshot.
