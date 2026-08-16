@@ -34,7 +34,7 @@ import type { PersistedGameSnapshot } from "../persistence/saveSchema";
 import { createPersistedSnapshot } from "../logic/saveSnapshot";
 import { normalizeDurationMs } from "../logic/normalizePersistedSnapshot";
 import { INTERACTIONS } from "../logic/facilities";
-import { createWorkerProgress, hireWorkerByRole, trainWorker, type WorkerRoleId } from "../logic/workforce";
+import { createWorkerProgress, getWheatWorkerRuntimeParameters, hireWorkerByRole, trainWorker, type WorkerRoleId } from "../logic/workforce";
 import { advanceCows, advanceDairyCycle, advancePastureNodes, startDairyCycle } from "../logic/dairy";
 import { getUnlockedResourceIds } from "../logic/unlockedResources";
 import { ProcessingSystem } from "../systems/ProcessingSystem";
@@ -73,6 +73,7 @@ export class GameScene extends Phaser.Scene {
   private operationsInRange=false;
   private wheatExpansionHold=0;
   private wheatExpansionLabel?:Phaser.GameObjects.Text;
+  private runtimeReady = false;
   private processingSystem!:ProcessingSystem;
   private collectionSystem!:CollectionNetworkSystem;
   private dairySystem!:DairySystem;
@@ -146,6 +147,7 @@ export class GameScene extends Phaser.Scene {
     this.collectionSystem=new CollectionNetworkSystem(this,this.farmer,()=>this.state,(state)=>{this.state=state;},this.contractKey);
     this.processingSystem=new ProcessingSystem(this,this.farmer,()=>this.state,(state)=>{this.state=state;},this.contractKey);
     this.dairySystem=new DairySystem(this,this.farmer,()=>this.state,(state)=>this.setState(state));
+    this.runtimeReady = true;
     this.scene.launch("ui");
     this.time.delayedCall(0, () => {
       this.ui = this.scene.get("ui") as UIScene;
@@ -161,10 +163,18 @@ export class GameScene extends Phaser.Scene {
     this.events.once(Phaser.Scenes.Events.SHUTDOWN, this.cleanup, this);
   }
   configureWheatE2E(level:0|1|2,workerLevel:1|2|3):void {
+    if (!this.runtimeReady) throw new Error("GameScene is not ready");
     this.state={...this.state,landExpansion:{...this.state.landExpansion,wheatFieldLevel:level},inventory:{...this.state.inventory,fieldCrate:0,fieldCrateCapacity:getWheatFieldCrateCapacity(level)},workers:{...this.state.workers,harvestWorker:{...this.state.workers.harvestWorker,hired:true,level:workerLevel,carried:0}}};
     this.configureWheatNodes(level);
+    for (const crop of this.crops) crop.resetReady();
+    this.workers.resetWheatHarvesterForE2E();
+    this.emitState();
   }
-  getWheatE2ESummary(){return{level:this.state.landExpansion.wheatFieldLevel??0,nodeCount:this.crops.length,crate:this.state.inventory.fieldCrate,cargo:this.state.workers.harvestWorker.carried,workerLevel:this.state.workers.harvestWorker.level,capacity:this.state.inventory.fieldCrateCapacity};}
+  isE2EReady():boolean{return this.runtimeReady&&this.scene.isActive();}
+  getWheatE2ESummary(){
+    const diagnostics=this.workers.getWheatDiagnostics();
+    return{level:this.state.landExpansion.wheatFieldLevel??0,nodeCount:this.crops.length,workerLevel:this.state.workers.harvestWorker.level,workerCapacity:getWheatWorkerRuntimeParameters("wheat-harvester",this.state.workers.harvestWorker.level).capacity,crateCapacity:this.state.inventory.fieldCrateCapacity,workerCargo:this.state.workers.harvestWorker.carried,crateAmount:this.state.inventory.fieldCrate,readyWest:this.crops.filter(c=>c.cluster==="west"&&c.model.state==="ready").length,readyCentral:this.crops.filter(c=>c.cluster==="central"&&c.model.state==="ready").length,...diagnostics};
+  }
   getPersistedSnapshot(sequence:number):PersistedGameSnapshot{return createPersistedSnapshot(this.state,{player:{x:this.farmer.x,y:this.farmer.y,facing:"front"},crops:this.crops.map((c)=>({id:c.cropId,resource:"wheat",state:c.model.state,remainingMs:normalizeDurationMs(c.model.regrowMs-c.model.elapsedMs)})),playTimeMs:this.time.now,saveSequence:sequence});}
   private restoreSnapshot(s:PersistedGameSnapshot):void{const fresh=createGameState();this.state={...fresh,cargo:{amounts:{...s.cargo.amounts},capacity:s.cargo.capacity},barn:{...s.storage.barn},market:{...s.storage.market},marketCapacity:{...s.storage.marketCapacity},soldByResource:{...s.economy.soldByResource},landExpansion:{...s.landExpansion},livestock:{feed:s.livestock.feed,feedCapacity:s.livestock.feedCapacity,eggs:s.livestock.eggs,eggCapacity:s.livestock.eggCapacity},economy:{...fresh.economy,walletCoins:s.economy.walletCoins,tillCoins:s.economy.tillCoins,soldUnits:s.economy.soldUnits,customersServed:s.economy.customersServed,customersLeftWithoutPurchase:s.economy.customersLeftWithoutPurchase,contractCoinsEarned:s.economy.contractCoinsEarned},upgrades:{...s.upgrades},workers:{harvestWorker:{...fresh.workers.harvestWorker,...s.workers.harvestWorker},transportWorker:{...fresh.workers.transportWorker,...s.workers.transportWorker},cornHarvestWorker:{...fresh.workers.cornHarvestWorker,...s.workers.cornHarvestWorker},cornTransportWorker:{...fresh.workers.cornTransportWorker,...s.workers.cornTransportWorker},poultryCaretaker:{...fresh.workers.poultryCaretaker,...s.workers.poultryCaretaker}},automation:{...fresh.automation,cornFieldCrate:s.automation.cornFieldCrate},inventory:{...fresh.inventory,fieldCrate:s.automation.wheatFieldCrate,fieldCrateCapacity:getWheatFieldCrateCapacity(s.landExpansion.wheatFieldLevel ?? 0)},contracts:structuredClone(s.contracts),processing:structuredClone(s.processing),collectionNetwork:structuredClone(s.collectionNetwork),dairy:structuredClone(s.dairy),harvestedTotal:s.statistics.harvestedTotal,...s.progression};this.registry.set("restored-player",s.player);this.registry.set("restored-crops",s.crops);}
   update(time: number, delta: number): void {
@@ -216,7 +226,7 @@ export class GameScene extends Phaser.Scene {
     const result=purchaseWheatFieldExpansion(this.state.economy.walletCoins,this.state.landExpansion);if(!result.purchased){this.game.events.emit(GAME_EVENTS.hint,result.reason==="maximum-level"?"最大まで拡張済み":`あと ${(cost??0)-this.state.economy.walletCoins} コイン必要です`);return;}
     this.state={...this.state,economy:{...this.state.economy,walletCoins:result.walletCoins},landExpansion:result.land,inventory:{...this.state.inventory,fieldCrateCapacity:getWheatFieldCrateCapacity(result.land.wheatFieldLevel??0)}};this.configureWheatNodes(result.land.wheatFieldLevel??0);this.emitState();this.game.events.emit(GAME_EVENTS.dirty,"priority");this.game.events.emit(GAME_EVENTS.hint,"麦畑を拡張しました");
   }
-  private configureWheatNodes(level:0|1|2):void{const existing=new Set(this.crops.map(c=>c.cropId));for(const [index,node] of getActiveWheatNodes(level).entries())if(!existing.has(node.id))this.crops.push(new CropNode(this,node.x,node.y,GAME_CONFIG.regrowBaseMs+(index%7)*170,index,node.id,node.cluster));}
+  private configureWheatNodes(level:0|1|2):void{const activeNodes=getActiveWheatNodes(level),activeIds=new Set(activeNodes.map(node=>node.id));for(let index=this.crops.length-1;index>=0;index--){if(!activeIds.has(this.crops[index].cropId)){this.crops[index].destroy();this.crops.splice(index,1);}}const existing=new Set(this.crops.map(c=>c.cropId));for(const [index,node] of activeNodes.entries())if(!existing.has(node.id))this.crops.push(new CropNode(this,node.x,node.y,GAME_CONFIG.regrowBaseMs+(index%7)*170,index,node.id,node.cluster));}
   private updateOperations():void{const action=INTERACTIONS.find(i=>i.id==="open-operations")!,inside=Phaser.Math.Distance.Between(this.farmer.x,this.farmer.y,action.center.x,action.center.y)<=action.radius;if(inside!==this.operationsInRange){this.operationsInRange=inside;this.game.events.emit(GAME_EVENTS.operationsRange,inside);}if(inside&&(Phaser.Input.Keyboard.JustDown(this.contractKey)||Phaser.Input.Keyboard.JustDown(this.cursors.space!)))this.game.events.emit(GAME_EVENTS.operationsOpen);}
   private handleOperationsAction(action:"hire"|"train",role:WorkerRoleId):void{const keys:Record<WorkerRoleId,keyof GameState["workers"]>={"wheat-harvester":"harvestWorker","wheat-transporter":"transportWorker","corn-harvester":"cornHarvestWorker","corn-transporter":"cornTransportWorker","poultry-caretaker":"poultryCaretaker"},key=keys[role],current=this.state.workers[key],hired=new Set<WorkerRoleId>();for(const [id,k] of Object.entries(keys) as [WorkerRoleId,keyof GameState["workers"]][])if(this.state.workers[k].hired)hired.add(id);const progress=createWorkerProgress(current.hired,key==="poultryCaretaker"?this.state.workers.poultryCaretaker.resource:role.startsWith("corn")?"corn":"wheat",current.carried);const result=action==="hire"?hireWorkerByRole(role,this.state.economy.walletCoins,progress,{eastUnlocked:this.state.landExpansion.eastCornFieldUnlocked,coopUnlocked:this.state.landExpansion.southChickenCoopUnlocked,hiredRoles:hired}):trainWorker(role,this.state.economy.walletCoins,progress);if(!result.changed){this.game.events.emit(GAME_EVENTS.hint,"条件またはコインが足りません");return;}this.setState({...this.state,economy:{...this.state.economy,walletCoins:result.wallet},workers:{...this.state.workers,[key]:{...current,hired:result.worker.hired,level:result.worker.level,status:action==="hire"?"作業場所へ移動中":"研修完了"}}});this.game.events.emit(GAME_EVENTS.dirty,"priority");}
   private createContractFacilities(): void {

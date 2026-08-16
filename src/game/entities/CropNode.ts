@@ -19,6 +19,10 @@ export class CropNode extends Phaser.GameObjects.Container {
     if (result.awarded) { this.draw(); this.scene.tweens.add({ targets: this, scaleX: 0.72, scaleY: 0.72, yoyo: true, duration: 110 }); }
     return result.awarded;
   }
+  resetReady(): void {
+    this.model = { ...this.model, state: "ready", elapsedMs: 0 };
+    this.draw();
+  }
   tick(delta: number, time: number): void {
     const previous = this.model.state; this.model = advanceCrop(this.model, delta);
     if (previous !== this.model.state) this.draw();
