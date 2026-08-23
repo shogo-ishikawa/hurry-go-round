@@ -9,6 +9,8 @@ export class ModalButton extends Phaser.GameObjects.Container{
   setFocused(value:boolean):this{this.focused=value;this.paint(value,false);return this;}
   trigger():void{if(this.enabled)this.activate();}
   isEnabled():boolean{return this.enabled;}
+  isFocused():boolean{return this.focused;}
+  getSerializableRect(){const rect=this.getData("buttonRect") as {x:number;y:number;width:number;height:number;label:string};return{...rect,enabled:this.enabled,focused:this.focused};}
   setLabel(value:string):this{this.caption.setText(value);return this;}
   destroy(fromScene?:boolean):void{super.destroy(fromScene);}
 }
