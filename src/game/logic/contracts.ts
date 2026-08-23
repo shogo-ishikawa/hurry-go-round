@@ -1,9 +1,12 @@
-import { emptyResourceAmounts, RESOURCE_IDS, type ResourceAmounts, type ResourceId } from "../config/resourceDefinitions";
-import type { ContractState, ContractType, DeliveryContract } from "../contracts/contractTypes";
+import { emptyResourceAmounts, RESOURCE_DEFINITIONS, RESOURCE_IDS, type ResourceAmounts, type ResourceId } from "../config/resourceDefinitions";
+import type { CarriedCargo } from "./resources";
+import type { ContractCommandResult, ContractState, ContractType, DeliveryContract } from "../contracts/contractTypes";
 
 export interface ContractGenerationInput { seed: number; nextSequence: number; count: number; unlockedResources: readonly ResourceId[]; reputationLevel: number }
 const RESOURCE_KEYS = RESOURCE_IDS;
 export const CONTRACT_OFFER_COUNT = 3;
+const result=(command:ContractCommandResult["command"],changed:boolean,message:string,reason?:ContractCommandResult["reason"]):ContractCommandResult=>({command,changed,message,reason,prioritySaveRequested:changed});
+export const formatContractIdentity=(contract:Pick<DeliveryContract,"sequence">)=>`依頼 #${String(contract.sequence).padStart(6,"0")}`;
 const prices: ResourceAmounts = { wheat:2,corn:3,egg:5,flour:6,cornmeal:8,bread:16,cornbread:26,hay:0,milk:8,butter:20,cheese:32 };
 const typeMultipliers: Record<ContractType, number> = { single: 1.35, mixed: 1.5, priority: 1.45 };
 const bonusRates: Record<ContractType, number> = { single: .15, mixed: .2, priority: .3 };
@@ -35,19 +38,20 @@ export function calculateContractReward(requirements: ResourceAmounts, type: Con
   return { base, bonus, total: base + bonus };
 }
 export function generateContractOffers(input: ContractGenerationInput): { offers: DeliveryContract[]; seed: number; nextSequence: number } {
-  if (!input.unlockedResources.length) throw new Error("At least one resource must be unlocked");
+  const eligible=input.unlockedResources.filter(resource=>RESOURCE_DEFINITIONS[resource].contractEligible);
+  if (!eligible.length) throw new Error("At least one contract-eligible resource must be unlocked");
   let seed = input.seed >>> 0, sequence = input.nextSequence; const offers: DeliveryContract[] = [];
   while (offers.length < input.count) {
     let roll; [seed, roll] = random(seed);
-    const mixedAllowed = input.unlockedResources.length > 1;
+    const mixedAllowed = eligible.length > 1;
     const type: ContractType = roll < .2 + input.reputationLevel * .03 ? "priority" : roll < .55 + input.reputationLevel * .04 && mixedAllowed ? "mixed" : "single";
     let selected: ResourceId[];
     if (type === "mixed") {
-      const max = Math.min(3, input.unlockedResources.length); let countRoll; [seed, countRoll] = random(seed);
-      const count = 2 + Math.floor(countRoll * (max - 1)); selected = [...input.unlockedResources];
+      const max = Math.min(3, eligible.length); let countRoll; [seed, countRoll] = random(seed);
+      const count = 2 + Math.floor(countRoll * (max - 1)); selected = [...eligible];
       for (let i = selected.length - 1; i > 0; i--) { let n; [seed, n] = random(seed); const j = Math.floor(n * (i + 1)); [selected[i], selected[j]] = [selected[j]!, selected[i]!]; }
       selected = selected.slice(0, count);
-    } else { let key; [seed, key] = choose(seed, input.unlockedResources); selected = [key]; }
+    } else { let key; [seed, key] = choose(seed, eligible); selected = [key]; }
     const requirements = emptyResourceAmounts();
     for (const key of selected) [seed, requirements[key]] = amount(seed, ranges[key][type === "mixed" ? "mixed" : type], input.reputationLevel);
     const targetRange = type === "priority" ? [90, 180] : type === "mixed" ? [240, 420] : [180, 300]; let target; [seed, target] = amount(seed, targetRange as [number, number], 0);
@@ -66,27 +70,27 @@ function replacement(state: ContractState, unlockedResources: ResourceId[]): Pic
   const generated = generateContractOffers({ seed: state.generatorSeed, nextSequence: state.nextSequence, count: 1, unlockedResources, reputationLevel: state.reputation.level });
   return { offers: [...state.offers, generated.offers[0]!], generatorSeed: generated.seed, nextSequence: generated.nextSequence };
 }
-export function acceptContract(state: ContractState, id: string, unlocked: ResourceId[]): { ok: true; state: ContractState } | { ok: false; reason: string } {
-  if (state.active) return { ok: false, reason: "進行中の契約を完了または中止してください" };
-  const offer = state.offers.find(item => item.id === id && item.status === "offered"); if (!offer) return { ok: false, reason: "契約候補が見つかりません" };
+export function acceptContract(state: ContractState, id: string, unlocked: ResourceId[]) {
+  if (state.active) return { ok:false, state, ...result("accept",false,"進行中の契約を完了または中止してください","active-contract-exists") };
+  const offer = state.offers.find(item => item.id === id && item.status === "offered"); if (!offer) return { ok:false, state, ...result("accept",false,"契約候補が見つかりません","offer-not-found") };
   const base = { ...state, offers: state.offers.filter(item => item.id !== id), active: { ...offer, delivered: emptyResourceAmounts(), elapsedActiveMs: 0, status: "active" as const }, deliveryCursor: null };
-  return { ok: true, state: { ...base, ...replacement(base, unlocked) } };
+  return { ok:true, state: { ...base, ...replacement(base, unlocked) }, ...result("accept",true,`${formatContractIdentity(offer)} を受注しました`) };
 }
-export function declineContractOffer(state: ContractState, id: string, unlocked: ResourceId[]): { ok: true; state: ContractState } | { ok: false; reason: string } {
-  if (state.declineCooldownMs > 0) return { ok: false, reason: "新しい候補を準備しています" }; if (!state.offers.some(o => o.id === id)) return { ok: false, reason: "契約候補が見つかりません" };
-  const base = { ...state, offers: state.offers.filter(o => o.id !== id), statistics: { ...state.statistics, offersDeclined: state.statistics.offersDeclined + 1 }, declineCooldownMs: 30000 };
-  return { ok: true, state: { ...base, ...replacement(base, unlocked) } };
+export function declineContractOffer(state: ContractState, id: string, unlocked: ResourceId[]) {
+  const declined=state.offers.find(o=>o.id===id&&o.status==="offered");if(!declined)return {ok:false,state,...result("decline",false,"契約候補が見つかりません","offer-not-found")};
+  const base = { ...state, offers: state.offers.filter(o => o.id !== id), statistics: { ...state.statistics, offersDeclined: state.statistics.offersDeclined + 1 }, declineCooldownMs: 0 };
+  const next={...base,...replacement(base,unlocked)};return {ok:true,state:next,...result("decline",true,`${formatContractIdentity(declined)} を見送り、新しい依頼を追加しました`)};
 }
-export function deliverNextContractResourceOne(state: ContractState, barn: ResourceAmounts): { state: ContractState; barn: ResourceAmounts; resource: ResourceId | null; changed: boolean } {
-  if (!state.active) return { state, barn, resource: null, changed: false }; const start = state.deliveryCursor ? (RESOURCE_KEYS.indexOf(state.deliveryCursor) + 1) % RESOURCE_KEYS.length : 0;
-  for (let i = 0; i < RESOURCE_KEYS.length; i++) { const key = RESOURCE_KEYS[(start + i) % RESOURCE_KEYS.length]!; if (state.active.delivered[key] < state.active.requirements[key] && barn[key] > 0) { const active = { ...state.active, delivered: { ...state.active.delivered, [key]: state.active.delivered[key] + 1 } }; return { state: { ...state, active, deliveryCursor: key }, barn: { ...barn, [key]: barn[key] - 1 }, resource: key, changed: true }; } }
-  return { state, barn, resource: null, changed: false };
+export function deliverNextContractResourceOne(state: ContractState, cargo:CarriedCargo, barn: ResourceAmounts) {
+  if (!state.active) return { state,cargo,barn,resource:null,source:null as null,...result("deliver",false,"進行中の契約がありません","no-active-contract") }; const start = state.deliveryCursor ? (RESOURCE_KEYS.indexOf(state.deliveryCursor) + 1) % RESOURCE_KEYS.length : 0;
+  for(let i=0;i<RESOURCE_KEYS.length;i++){const key=RESOURCE_KEYS[(start+i)%RESOURCE_KEYS.length]!;if(state.active.delivered[key]>=state.active.requirements[key])continue;const source=cargo.amounts[key]>0?"cargo":barn[key]>0?"barn":null;if(!source)continue;const active={...state.active,delivered:{...state.active.delivered,[key]:state.active.delivered[key]+1}};const name=RESOURCE_DEFINITIONS[key].publicName;return{state:{...state,active,deliveryCursor:key},cargo:source==="cargo"?{...cargo,amounts:{...cargo.amounts,[key]:cargo.amounts[key]-1}}:cargo,barn:source==="barn"?{...barn,[key]:barn[key]-1}:barn,resource:key,source,...result("deliver",true,`${name}を${source==="cargo"?"持ち物":"倉庫"}から1個出荷しました`)}};
+  const missing=RESOURCE_KEYS.filter(key=>state.active!.requirements[key]>state.active!.delivered[key]).map(key=>`${RESOURCE_DEFINITIONS[key].publicName} ${state.active!.requirements[key]-state.active!.delivered[key]}`).join("、");return{state,cargo,barn,resource:null,source:null as null,...result("deliver",false,`出荷できる商品がありません\n不足：${missing}`,"no-deliverable-stock")};
 }
 export function isContractComplete(contract: DeliveryContract): boolean { return RESOURCE_KEYS.every(k => contract.delivered[k] >= contract.requirements[k]); }
-export function advanceContractActiveTime(state: ContractState, delta: number, paused: boolean): ContractState { return !state.active || paused ? state : { ...state, declineCooldownMs: Math.max(0, state.declineCooldownMs - delta), active: { ...state.active, elapsedActiveMs: state.active.elapsedActiveMs + Math.max(0, delta) } }; }
-export function cancelActiveContract(state: ContractState, barn: ResourceAmounts): { ok: true; state: ContractState; barn: ResourceAmounts } | { ok: false; reason: string } { if (!state.active) return { ok: false, reason: "進行中の契約がありません" }; const returned = { ...barn }; for (const key of RESOURCE_KEYS) returned[key] += state.active.delivered[key]; return { ok: true, state: { ...state, active: null, deliveryCursor: null, statistics: { ...state.statistics, contractsCancelled: state.statistics.contractsCancelled + 1 } }, barn: returned }; }
-export function completeContract(state: ContractState, wallet: number): { ok: true; state: ContractState; wallet: number; reward: { base: number; bonus: number; total: number; reputation: number } } | { ok: false; reason: string } {
-  const active = state.active; if (!active || !isContractComplete(active)) return { ok: false, reason: "契約はまだ完了していません" };
+export function advanceContractActiveTime(state: ContractState, delta: number, paused: boolean): ContractState { const normalized={...state,declineCooldownMs:0};return !normalized.active || paused ? normalized : { ...normalized, active: { ...normalized.active, elapsedActiveMs: normalized.active.elapsedActiveMs + Math.max(0, delta) } }; }
+export function cancelActiveContract(state: ContractState, barn: ResourceAmounts) { if (!state.active) return { ok:false,state,barn,returned:emptyResourceAmounts(),...result("cancel",false,"進行中の契約がありません","no-active-contract") }; const returned={...barn},quantities=emptyResourceAmounts();for(const key of RESOURCE_KEYS){quantities[key]=state.active.delivered[key];returned[key]+=quantities[key]}const detail=RESOURCE_KEYS.filter(key=>quantities[key]>0).map(key=>`${RESOURCE_DEFINITIONS[key].publicName} ${quantities[key]}個`).join("、")||"なし";return {ok:true,state:{...state,active:null,deliveryCursor:null,statistics:{...state.statistics,contractsCancelled:state.statistics.contractsCancelled+1}},barn:returned,returned:quantities,...result("cancel",true,`契約を中止しました。倉庫へ返却：${detail}`)}; }
+export function completeContract(state: ContractState, wallet: number) {
+  const active = state.active; if (!active) return {ok:false,state,wallet,...result("complete",false,"進行中の契約がありません","no-active-contract")};if(!isContractComplete(active)) return {ok:false,state,wallet,...result("complete",false,"契約はまだ完了していません","contract-incomplete")};
   const reward = calculateContractReward(active.requirements, active.type, state.reputation.level, active.elapsedActiveMs, active.targetBonusMs); const points = state.reputation.points + active.reputationReward;
-  return { ok: true, wallet: wallet + reward.total, reward: { ...reward, reputation: active.reputationReward }, state: { ...state, active: null, deliveryCursor: null, reputation: { points, level: calculateReputationLevel(points) }, statistics: { ...state.statistics, contractsCompleted: state.statistics.contractsCompleted + 1, contractCoinsEarned: state.statistics.contractCoinsEarned + reward.total, speedBonusesEarned: state.statistics.speedBonusesEarned + Number(reward.bonus > 0), bestCompletionMs: state.statistics.bestCompletionMs === null ? active.elapsedActiveMs : Math.min(state.statistics.bestCompletionMs, active.elapsedActiveMs) } } };
+  return { ok:true,wallet:wallet+reward.total,reward:{...reward,reputation:active.reputationReward},state:{...state,active:null,deliveryCursor:null,reputation:{points,level:calculateReputationLevel(points)},statistics:{...state.statistics,contractsCompleted:state.statistics.contractsCompleted+1,contractCoinsEarned:state.statistics.contractCoinsEarned+reward.total,speedBonusesEarned:state.statistics.speedBonusesEarned+Number(reward.bonus>0),bestCompletionMs:state.statistics.bestCompletionMs===null?active.elapsedActiveMs:Math.min(state.statistics.bestCompletionMs,active.elapsedActiveMs)}},...result("complete",true,`${formatContractIdentity(active)} を達成しました`)};
 }
