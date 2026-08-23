@@ -7,7 +7,7 @@ import type { CollectionNetwork } from "../logic/collectionNetwork";
 import type { DairyState } from "../logic/dairy";
 
 export const SAVE_FORMAT = "hurry-go-round-save" as const;
-export const SAVE_SCHEMA_VERSION = 7 as const;
+export const SAVE_SCHEMA_VERSION = 8 as const;
 export const GAME_VERSION = "0.9.5";
 
 export interface PersistedSettings {
@@ -62,6 +62,7 @@ export interface PersistedGameSnapshot {
     cornFieldLevel?: 0 | 1 | 2;
   };
   livestock: {
+    coopLevel: 0|1|2|3;
     feed: number;
     feedCapacity: number;
     eggs: number;

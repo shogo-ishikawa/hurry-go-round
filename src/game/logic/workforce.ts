@@ -16,6 +16,9 @@ export const WORKER_ROLES: Readonly<Record<WorkerRoleId, WorkerRoleDefinition>> 
 };
 export const WORKER_ROLE_IDS = Object.freeze(Object.keys(WORKER_ROLES) as WorkerRoleId[]);
 export const createWorkerProgress = (hired=false, resource:ResourceId|null=null, amount=0):WorkerProgress => ({ hired, level:hired?1:0, carriedResource:amount>0?resource:null, carriedAmount:amount });
+export function toWorkerProgress(current:{hired:boolean;level:WorkerLevel;carried:number;resource?:"corn"|"egg"|null}, defaultResource:ResourceId):WorkerProgress {
+  return {hired:current.hired,level:current.level,carriedResource:current.carried>0?(current.resource??defaultResource):null,carriedAmount:current.carried};
+}
 
 export function getWorkerAvailability(role:WorkerRoleId, progress:WorkerProgress, prerequisites:WorkerPrerequisites, wallet:number): { available:true } | { available:false; reason:WorkerAvailabilityReason; missingCoins?:number } {
   if (progress.hired) return { available:false, reason:"already-hired" };

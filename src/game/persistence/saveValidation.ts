@@ -91,6 +91,9 @@ export function validateSnapshot(
   }
 
   if(!finiteNonNegativeNumber(snapshot.playTimeMs)) errors.push("invalid play time");
+  const livestock=snapshot.livestock;
+  if(!object(livestock)||![0,1,2,3].includes(livestock.coopLevel)||!finiteNonNegativeInteger(livestock.feed)||!finiteNonNegativeInteger(livestock.eggs)||!finiteNonNegativeNumber(livestock.eggRemainingMs))errors.push("invalid livestock state");
+  else {const capacity=[12,12,18,24][livestock.coopLevel];if(livestock.feedCapacity!==capacity||livestock.eggCapacity!==capacity||livestock.feed>capacity||livestock.eggs>capacity)errors.push("invalid livestock capacity");}
 
   if (
     !Array.isArray(snapshot.crops) ||

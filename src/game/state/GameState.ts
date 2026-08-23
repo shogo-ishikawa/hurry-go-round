@@ -37,6 +37,7 @@ export interface GameState {
   soldByResource: ResourceAmounts;
   landExpansion: LandExpansionState;
   livestock: LivestockInventory;
+  coopLevel: 0|1|2|3;
   economy: Economy;
   upgrades: {
     harvestSpeedLevel: number;
@@ -131,6 +132,7 @@ export function createGameState(): GameState {
       eggs: 0,
       eggCapacity: GAME_CONFIG.eggStorageCapacity,
     },
+    coopLevel: 0,
     economy: {
       walletCoins: 0,
       tillCoins: 0,
