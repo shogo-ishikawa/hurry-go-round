@@ -5,8 +5,8 @@ test.beforeEach(async ({ page }) => {
     console.error(`[browser pageerror] ${error.stack ?? error.message}`);
   });
   page.on("console", (message) => {
-    if (message.type() === "error" || message.type() === "warning") {
-      console.error(`[browser ${message.type()}] ${message.text()}`);
+    if (message.type() === "error") {
+      console.error(`[browser error] ${message.text()}`);
     }
   });
 });
@@ -50,36 +50,24 @@ async function wheatSummary(page: Page) {
   });
 }
 
-async function waitForDeposit(
-  page: Page,
-  expectedBatch: number,
-  expectedCrate: number,
-): Promise<void> {
-  let lastLoggedAt = 0;
+async function verifyLiveRuntimeStarted(page: Page): Promise<void> {
   await expect
     .poll(
       async () => {
         const summary = await wheatSummary(page);
-        const now = Date.now();
-        if (now - lastLoggedAt >= 5_000) {
-          lastLoggedAt = now;
-          console.log(`[wheat diagnostics] ${JSON.stringify(summary)}`);
-        }
-        return {
-          completedDepositCount: summary.completedDepositCount,
-          lastDepositedBatchSize: summary.lastDepositedBatchSize,
-          crateAmount: summary.crateAmount,
-          emptyCrateTripCount: summary.emptyCrateTripCount,
-        };
+        return summary.workerPhase !== "idle" && summary.workerPhase !== "seeking-crop";
       },
-      { timeout: 60_000 },
+      { timeout: 10_000 },
     )
-    .toMatchObject({
-      completedDepositCount: 1,
-      lastDepositedBatchSize: expectedBatch,
-      crateAmount: expectedCrate,
-      emptyCrateTripCount: 0,
-    });
+    .toBe(true);
+}
+
+async function advanceUntilDeposit(page: Page) {
+  return page.evaluate(() => {
+    const bridge = window.__HGR_E2E__;
+    if (!bridge) throw new Error("Hurry-Go-Round E2E bridge is unavailable");
+    return bridge.advanceWheatUntilDeposit(60_000, 50);
+  });
 }
 
 test("Lv2 deposits seven wheat and expanded wheat survives reload", async ({ page }) => {
@@ -87,16 +75,25 @@ test("Lv2 deposits seven wheat and expanded wheat survives reload", async ({ pag
   await page.getByRole("button", { name: "はじめる" }).click();
   await configureWheat(page, 1, 2);
   await expect.poll(() => wheatSummary(page)).toMatchObject({
+    level: 1,
     nodeCount: 42,
     workerLevel: 2,
     workerCapacity: 7,
     crateCapacity: 24,
   });
 
-  const startedAt = Date.now();
-  await waitForDeposit(page, 7, 7);
-  const completionMs = Date.now() - startedAt;
-  console.log(`Lv2 first wheat batch: 7 in ${completionMs}ms`);
+  await verifyLiveRuntimeStarted(page);
+  const result = await advanceUntilDeposit(page);
+  console.log(`Lv2 first wheat batch: ${result.diagnostics.lastDepositedBatchSize} in ${result.simulatedMs} simulated ms`);
+  expect(result.completed).toBe(true);
+  expect(result.simulatedMs).toBeLessThan(30_000);
+  expect(result.diagnostics).toMatchObject({
+    completedDepositCount: 1,
+    lastDepositedBatchSize: 7,
+    crateAmount: 7,
+    workerCargo: 0,
+    emptyCrateTripCount: 0,
+  });
 
   await page.evaluate(async () => {
     const bridge = window.__HGR_E2E__;
@@ -112,6 +109,7 @@ test("Lv2 deposits seven wheat and expanded wheat survives reload", async ({ pag
     workerLevel: 2,
     workerCapacity: 7,
     crateCapacity: 24,
+    crateAmount: 7,
   });
 });
 
@@ -120,14 +118,23 @@ test("Lv3 deposits ten wheat without an empty crate trip", async ({ page }) => {
   await page.getByRole("button", { name: "はじめる" }).click();
   await configureWheat(page, 2, 3);
   await expect.poll(() => wheatSummary(page)).toMatchObject({
+    level: 2,
     nodeCount: 54,
     workerLevel: 3,
     workerCapacity: 10,
     crateCapacity: 32,
   });
 
-  const startedAt = Date.now();
-  await waitForDeposit(page, 10, 10);
-  const completionMs = Date.now() - startedAt;
-  console.log(`Lv3 first wheat batch: 10 in ${completionMs}ms`);
+  await verifyLiveRuntimeStarted(page);
+  const result = await advanceUntilDeposit(page);
+  console.log(`Lv3 first wheat batch: ${result.diagnostics.lastDepositedBatchSize} in ${result.simulatedMs} simulated ms`);
+  expect(result.completed).toBe(true);
+  expect(result.simulatedMs).toBeLessThan(30_000);
+  expect(result.diagnostics).toMatchObject({
+    completedDepositCount: 1,
+    lastDepositedBatchSize: 10,
+    crateAmount: 10,
+    workerCargo: 0,
+    emptyCrateTripCount: 0,
+  });
 });
