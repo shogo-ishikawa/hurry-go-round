@@ -8,7 +8,7 @@ export type WorkerAvailabilityReason = "land-locked" | "prerequisite-worker-miss
 
 export interface WorkerRoleDefinition { id: WorkerRoleId; publicName: string; facilityId: string; hireInteractionId: string; hireCost: number; trainingCosts: readonly [number, number]; capacities: readonly [number, number, number] }
 export const WORKER_ROLES: Readonly<Record<WorkerRoleId, WorkerRoleDefinition>> = {
-  "wheat-harvester": { id:"wheat-harvester", publicName:"麦の収穫スタッフ", facilityId:"wheat-harvest-hire", hireInteractionId:"hire-wheat-harvester", hireCost:40, trainingCosts:[80,180], capacities:[4,5,6] },
+  "wheat-harvester": { id:"wheat-harvester", publicName:"麦の収穫スタッフ", facilityId:"wheat-harvest-hire", hireInteractionId:"hire-wheat-harvester", hireCost:40, trainingCosts:[80,180], capacities:[4,7,10] },
   "wheat-transporter": { id:"wheat-transporter", publicName:"麦の運搬スタッフ", facilityId:"wheat-transport-hire", hireInteractionId:"hire-wheat-transporter", hireCost:75, trainingCosts:[110,240], capacities:[6,8,10] },
   "corn-harvester": { id:"corn-harvester", publicName:"とうもろこし収穫スタッフ", facilityId:"corn-harvest-hire", hireInteractionId:"hire-corn-harvester", hireCost:160, trainingCosts:[220,450], capacities:[5,6,8] },
   "corn-transporter": { id:"corn-transporter", publicName:"とうもろこし運搬スタッフ", facilityId:"corn-transport-hire", hireInteractionId:"hire-corn-transporter", hireCost:240, trainingCosts:[280,560], capacities:[8,10,12] },
@@ -32,6 +32,11 @@ export function hireWorkerByRole(role:WorkerRoleId, wallet:number, progress:Work
 export function getWorkerParametersForLevel(role:WorkerRoleId, level:WorkerLevel): { moveSpeedMultiplier:number; operationIntervalMultiplier:number; capacity:number } {
   const move=[0,1,1.15,1.3] as const, interval=[0,1,.85,.7] as const;
   return { moveSpeedMultiplier:move[level], operationIntervalMultiplier:interval[level], capacity:level===0?0:WORKER_ROLES[role].capacities[level-1] };
+}
+export function getWheatWorkerRuntimeParameters(role:"wheat-harvester"|"wheat-transporter",level:WorkerLevel){
+ const p=getWorkerParametersForLevel(role,level);
+ if(role==="wheat-harvester")return{capacity:p.capacity,moveSpeed:[0,155,178,202][level],operationIntervalMs:[0,850,650,480][level],retargetIntervalMs:[0,250,190,140][level]};
+ return{capacity:p.capacity,moveSpeed:185*p.moveSpeedMultiplier,operationIntervalMs:150*p.operationIntervalMultiplier,retargetIntervalMs:0};
 }
 export function getWorkerTrainingCost(role:WorkerRoleId, level:WorkerLevel):number|null { return level===1?WORKER_ROLES[role].trainingCosts[0]:level===2?WORKER_ROLES[role].trainingCosts[1]:null; }
 export function trainWorker(role:WorkerRoleId,wallet:number,worker:WorkerProgress):{changed:boolean;wallet:number;worker:WorkerProgress;reason?:WorkerAvailabilityReason;prioritySaveRequested:boolean}{

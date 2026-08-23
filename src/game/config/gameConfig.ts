@@ -21,7 +21,7 @@ export const GAME_CONFIG = {
   upgradeHoldDurationMs: 900,
   harvestIntervalsByLevel: [280, 220, 170],
   harvestSpeedUpgradeCosts: [20, 55],
-  fieldCrate: { x: 1110, y: 790, radius: 95 },
+  fieldCrate: { x: 850, y: 790, radius: 78 },
   fieldCrateCapacity: 16,
   fieldCratePickupRadius: 95,
   fieldCratePickupIntervalMs: 160,

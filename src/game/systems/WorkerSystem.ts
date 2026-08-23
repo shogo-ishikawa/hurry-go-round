@@ -8,15 +8,18 @@ import type { CropNode } from "../entities/CropNode";
 import type { GameState } from "../state/GameState";
 import { WORKER_ROUTES } from "../routes/workerRoutes";
 import {
-  depositHarvestWorkerCargoOne,
+  depositHarvestWorkerBatch,
   getAutomationWheatTotal,
   harvestWorkerCollectOne,
   loadTransportWorkerOne,
   unloadTransportWorkerOne,
   type AutomationState,
+  selectNextWheatNodeInCluster,
+  selectWheatFieldCluster,
 } from "../logic/workers";
 import { addCargoOne } from "../logic/resources";
 import { palette } from "../art/palette";
+import { getWheatWorkerRuntimeParameters } from "../logic/workforce";
 export type HarvestWorkerPhase =
   | "idle"
   | "seeking-crop"
@@ -48,6 +51,12 @@ export class WorkerSystem {
   private unloadTimer = 0;
   private routeIndex = 0;
   private crateFullNotified = false;
+  private activeCluster?: "west" | "central";
+  private clusterEmptyElapsed = 0;
+  private needsFieldEntry = true;
+  private lastDepositedBatchSize = 0;
+  private completedDepositCount = 0;
+  private emptyCrateTripCount = 0;
   constructor(
     private scene: Phaser.Scene,
     private farmer: Farmer,
@@ -64,7 +73,7 @@ export class WorkerSystem {
     if (this.harvester) this.updateHarvester(delta);
     if (this.transporter) this.updateTransporter(delta);
     const s = this.getState();
-    this.crate.updateDisplay(s.inventory.fieldCrate);
+    this.crate.updateDisplay(s.inventory.fieldCrate, s.inventory.fieldCrateCapacity);
     this.harvester?.setCargo(s.workers.harvestWorker.carried);
     this.transporter?.setCargo(s.workers.transportWorker.carried);
   }
@@ -146,7 +155,11 @@ export class WorkerSystem {
   }
   private updateHarvester(delta: number): void {
     const w = this.harvester!,
-      s = this.getState();
+      s = this.getState(),
+      params = getWheatWorkerRuntimeParameters(
+        "wheat-harvester",
+        s.workers.harvestWorker.level,
+      );
     this.retarget = Math.max(0, this.retarget - delta);
     if (
       this.harvestPhase === "seeking-crop" ||
@@ -154,14 +167,42 @@ export class WorkerSystem {
     ) {
       if (
         s.workers.harvestWorker.carried >=
-        GAME_CONFIG.harvestWorkerCarryCapacity
+        params.capacity
       ) {
         this.setHarvestPhase("returning-to-crate");
         return;
       }
+      const nextInActiveCluster = this.activeCluster
+        ? this.nextInCluster(this.activeCluster, w.x, w.y)
+        : undefined;
+      if (this.activeCluster && s.workers.harvestWorker.carried > 0) {
+        if (nextInActiveCluster) {
+          this.clusterEmptyElapsed = 0;
+          this.target = nextInActiveCluster;
+          this.setHarvestPhase("moving-to-crop");
+          return;
+        }
+        this.clusterEmptyElapsed += delta;
+        if (this.clusterEmptyElapsed < 600) return;
+        this.clusterEmptyElapsed = 0;
+        this.needsFieldEntry = true;
+        this.setHarvestPhase("returning-to-crate");
+        return;
+      }
+      this.clusterEmptyElapsed = 0;
       if (this.retarget > 0) return;
-      this.retarget = GAME_CONFIG.harvestWorkerRetargetIntervalMs;
-      this.target = this.nearestReady(w.x, w.y);
+      this.retarget = params.retargetIntervalMs;
+      const selectedCluster = selectWheatFieldCluster(
+        this.clusterNodes(),
+        w.x,
+        w.y,
+        this.activeCluster,
+      ) ?? undefined;
+      if (selectedCluster !== this.activeCluster) this.needsFieldEntry = true;
+      this.activeCluster = selectedCluster;
+      this.target = this.activeCluster
+        ? this.nextInCluster(this.activeCluster, w.x, w.y)
+        : undefined;
       if (!this.target) {
         this.setHarvestPhase(
           s.workers.harvestWorker.carried > 0
@@ -170,25 +211,27 @@ export class WorkerSystem {
         );
         return;
       }
-      this.setHarvestPhase("moving-to-field");
+      this.setHarvestPhase(
+        this.needsFieldEntry ? "moving-to-field" : "moving-to-crop",
+      );
     }
     if (this.harvestPhase === "moving-to-field") {
       const entry =
-        (this.target?.y ?? 0) < 700
-          ? WORKER_ROUTES.fieldEntries[0]
-          : WORKER_ROUTES.fieldEntries[1];
+        this.target?.cluster === "west" ? WORKER_ROUTES.fieldEntries[0] : WORKER_ROUTES.fieldEntries[1];
       if (
         entry &&
-        w.moveToward(entry, delta, GAME_CONFIG.harvestWorkerMoveSpeed)
-      )
+        w.moveToward(entry, delta, params.moveSpeed)
+      ) {
+        this.needsFieldEntry = false;
         this.setHarvestPhase("moving-to-crop");
+      }
     } else if (this.harvestPhase === "moving-to-crop") {
       if (!this.target || this.target.model.state !== "ready") {
         this.setHarvestPhase("seeking-crop");
         return;
       }
       if (
-        w.moveToward(this.target, delta, GAME_CONFIG.harvestWorkerMoveSpeed)
+        w.moveToward(this.target, delta, params.moveSpeed)
       ) {
         this.timer = 0;
         this.setHarvestPhase("harvesting");
@@ -199,12 +242,12 @@ export class WorkerSystem {
         return;
       }
       this.timer += delta;
-      if (this.timer >= GAME_CONFIG.harvestWorkerHarvestDurationMs) {
+      if (this.timer >= params.operationIntervalMs) {
         const before = getAutomationWheatTotal(this.automation(s));
         if (this.target.harvest()) {
           const r = harvestWorkerCollectOne(
             this.automation(s),
-            GAME_CONFIG.harvestWorkerCarryCapacity,
+            params.capacity,
           );
           if (r.changed) {
             this.apply(s, r.state, { harvestedTotal: s.harvestedTotal + 1 });
@@ -213,14 +256,35 @@ export class WorkerSystem {
           }
         }
         this.target = undefined;
-        this.setHarvestPhase(routingAfterHarvest(this.getState()));
+        const afterHarvest = this.getState();
+        if (afterHarvest.workers.harvestWorker.carried >= params.capacity) {
+          this.needsFieldEntry = true;
+          this.setHarvestPhase("returning-to-crate");
+          return;
+        }
+        const next = this.activeCluster
+          ? this.nextInCluster(this.activeCluster, w.x, w.y)
+          : undefined;
+        if (next) {
+          this.target = next;
+          this.setHarvestPhase("moving-to-crop");
+        } else {
+          this.clusterEmptyElapsed = 0;
+          this.setHarvestPhase("seeking-crop");
+        }
       }
     } else if (this.harvestPhase === "returning-to-crate") {
+      if (s.workers.harvestWorker.carried <= 0) {
+        this.emptyCrateTripCount += 1;
+        this.needsFieldEntry = true;
+        this.setHarvestPhase("seeking-crop");
+        return;
+      }
       if (
         w.moveToward(
           WORKER_ROUTES.crateWait,
           delta,
-          GAME_CONFIG.harvestWorkerMoveSpeed,
+          params.moveSpeed,
         )
       )
         this.setHarvestPhase("depositing");
@@ -248,16 +312,27 @@ export class WorkerSystem {
       if (this.depositTimer < GAME_CONFIG.harvestWorkerDepositIntervalMs)
         return;
       this.depositTimer -= GAME_CONFIG.harvestWorkerDepositIntervalMs;
-      const r = depositHarvestWorkerCargoOne(this.automation(current));
+      const r = depositHarvestWorkerBatch(this.automation(current));
       if (r.changed) {
         this.apply(current, r.state);
+        this.lastDepositedBatchSize = r.transferred;
+        this.completedDepositCount += 1;
         this.effect(
           w.x,
           w.y,
           GAME_CONFIG.fieldCrate.x,
           GAME_CONFIG.fieldCrate.y,
         );
+        w.setStatus(`麦を ${r.transferred} 個まとめて納品`);
         this.tutorial(11);
+        if (r.state.harvestWorker.carried <= 0) {
+          this.needsFieldEntry = true;
+          this.setHarvestPhase("seeking-crop");
+        } else if (
+          r.state.inventory.fieldCrate >= r.state.inventory.fieldCrateCapacity
+        ) {
+          this.setHarvestPhase("waiting-for-crate-space");
+        }
       }
     }
   }
@@ -336,18 +411,55 @@ export class WorkerSystem {
       }
     }
   }
-  private nearestReady(x: number, y: number): CropNode | undefined {
-    let result: CropNode | undefined,
-      best = Infinity;
-    for (const crop of this.crops) {
-      if (crop.model.state !== "ready") continue;
-      const d = Phaser.Math.Distance.Squared(x, y, crop.x, crop.y);
-      if (d < best) {
-        best = d;
-        result = crop;
-      }
-    }
-    return result;
+  private clusterNodes() {
+    return this.crops.map((crop) => ({
+      id: crop.cropId,
+      cluster: crop.cluster,
+      x: crop.x,
+      y: crop.y,
+      ready: crop.model.state === "ready",
+    }));
+  }
+  private nextInCluster(
+    cluster: "west" | "central",
+    x: number,
+    y: number,
+  ): CropNode | undefined {
+    const node = selectNextWheatNodeInCluster(
+      this.clusterNodes(),
+      cluster,
+      x,
+      y,
+    );
+    return node ? this.crops.find((crop) => crop.cropId === node.id) : undefined;
+  }
+  resetWheatHarvesterForE2E(): void {
+    this.harvester?.destroy();
+    this.harvester = undefined;
+    this.harvestPhase = "idle";
+    this.target = undefined;
+    this.activeCluster = undefined;
+    this.needsFieldEntry = true;
+    this.timer = 0;
+    this.retarget = 0;
+    this.depositTimer = 0;
+    this.clusterEmptyElapsed = 0;
+    this.crateFullNotified = false;
+    this.lastDepositedBatchSize = 0;
+    this.completedDepositCount = 0;
+    this.emptyCrateTripCount = 0;
+    this.ensureWorkers();
+  }
+  getWheatDiagnostics() {
+    return {
+      workerPhase: this.harvestPhase,
+      activeCluster: this.activeCluster ?? null,
+      workerX: this.harvester?.x ?? null,
+      workerY: this.harvester?.y ?? null,
+      lastDepositedBatchSize: this.lastDepositedBatchSize,
+      completedDepositCount: this.completedDepositCount,
+      emptyCrateTripCount: this.emptyCrateTripCount,
+    };
   }
   private setHarvestPhase(p: HarvestWorkerPhase): void {
     if (p === this.harvestPhase) return;
@@ -402,10 +514,4 @@ export class WorkerSystem {
       onComplete: () => d.destroy(),
     });
   }
-}
-function routingAfterHarvest(s: GameState): HarvestWorkerPhase {
-  return s.workers.harvestWorker.carried >=
-    GAME_CONFIG.harvestWorkerCarryCapacity
-    ? "returning-to-crate"
-    : "seeking-crop";
 }

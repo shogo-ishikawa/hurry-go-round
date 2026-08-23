@@ -1,8 +1,10 @@
 import type { CornFieldLevel } from "./cornFieldExpansion";
+import type { WheatFieldLevel } from "../config/farmLayout";
 
 export type LandExpansionId = "eastCornField" | "southChickenCoop";
 
 export interface LandExpansionState {
+  wheatFieldLevel?: WheatFieldLevel;
   eastCornFieldUnlocked: boolean;
   southChickenCoopUnlocked: boolean;
   /**
