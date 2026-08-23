@@ -216,5 +216,6 @@ export const GAME_EVENTS = {
   collectionRange: "collection-range",
   collectionOpen: "collection-open",
   collectionAction: "collection-action",
+  collectionResult: "collection-command-result",
   dirty: "persistent-state-dirty",
 } as const;
