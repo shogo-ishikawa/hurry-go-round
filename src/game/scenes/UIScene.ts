@@ -7,10 +7,12 @@ import type { Point } from "../logic/movement";
 import { palette as colors } from "../art/palette";
 import { getCarriedTotal } from "../logic/resources";
 import { WORKER_ROLE_IDS, WORKER_ROLES, getWorkerTrainingCost, type WorkerRoleId } from "../logic/workforce";
-import { getMachinePublicStatus, getProcessingConstructionAvailability, RECIPES, type MachineId, type RecipeId } from "../logic/processing";
+import { getProcessingConstructionAvailability } from "../logic/processing";
 import { ModalButton } from "./ModalButton";
 import { COLLECTION_SOURCES, getCollectionPanelViewModel, type CollectionCommand, type CollectionCommandResult, type CollectionRoutingMode } from "../logic/collectionNetwork";
 import { COLLECTION_FACILITIES } from "../config/collectionFacilities";
+import { createInventoryViewModel, formatCompactRows } from "../logic/inventoryViewModel";
+import { createMachineViewModel } from "../logic/processingViewModel";
 let portraitNoticeShown = false;
 let lastCollectionKey = "", lastCollectionKeyShift = false, lastCollectionKeyAt = -Infinity;
 export class UIScene extends Phaser.Scene {
@@ -41,6 +43,7 @@ export class UIScene extends Phaser.Scene {
   private saveStatus!: Phaser.GameObjects.Text;
   private overlay: Phaser.GameObjects.GameObject[] = [];
   private collectionOpenState=false; private collectionPage=0; private collectionResult=""; private modalButtons:ModalButton[]=[]; private modalFocus=-1;
+  private inventoryPage=0;private processingPage=0;
   constructor() {
     super("ui");
   }
@@ -53,7 +56,7 @@ export class UIScene extends Phaser.Scene {
       color: "#49382e",
       fontStyle: "bold",
     };
-    this.carriedText = this.add.text(27, 20, "持ち物\n空", style);
+    this.carriedText = this.add.text(27, 20, "持ち物\n空", style).setInteractive({useHandCursor:true}).on("pointerup",()=>this.openInventory());
     this.barnText = this.add.text(27, 52, "倉庫\n麦 0", style);
     this.marketText = this.add.text(0, 0, "売り場\n麦 0 / 8", style);
     this.tillText = this.add.text(0, 0, "売上  0", style);
@@ -125,6 +128,7 @@ export class UIScene extends Phaser.Scene {
     this.game.events.on(GAME_EVENTS.collectionOpen,this.openCollection,this);
     this.game.events.on(GAME_EVENTS.collectionResult,this.handleCollectionResult,this);
     this.input.keyboard?.on("keydown",this.handleModalKey,this);
+    this.input.keyboard?.on("keydown-I",this.openInventory,this);
     this.game.events.on("save-status",this.updateSaveStatus,this);
     this.input.keyboard?.on("keydown-ESC",this.togglePause,this); this.input.keyboard?.on("keydown-P",this.togglePause,this);
     this.scale.on(Phaser.Scale.Events.RESIZE, this.layout, this);
@@ -148,6 +152,7 @@ export class UIScene extends Phaser.Scene {
   private showOperationsButton=(visible:boolean):void=>{this.operationsButton.setVisible(visible&&!this.overlay.length);};
   private showProcessingButton=(visible:boolean):void=>{this.processingButton.setVisible(visible&&!this.overlay.length);};
   private showCollectionButton=(visible:boolean):void=>{this.collectionButton.setVisible(visible&&!this.overlay.length);};
+  private openInventory=():void=>{if(this.overlay.length||!this.lastState)return;this.overlayBase("在庫一覧");const state=this.lastState,vm=createInventoryViewModel(state),w=this.scale.width,h=this.scale.height,compact=w<700||h<650,pages=["持ち物","倉庫","売り場","生産設備内","集荷・集配"] as const,top=compact?76:94,tabWidth=Math.min(170,(w-24)/pages.length);pages.forEach((label,i)=>this.addModalButton(12+tabWidth/2+i*tabWidth,top,tabWidth-4,label,()=>{this.closeOverlay();this.inventoryPage=i;this.openInventory();},i!==this.inventoryPage,"選択中"));const page=pages[this.inventoryPage];let lines:string[]=[];if(page==="持ち物")lines=[`持ち物（プレイヤーが運搬中）　合計 ${vm.totals.carried} / ${state.cargo.capacity}`,...vm.carried.map(r=>`${r.name}　${r.amount}個`)];if(page==="倉庫")lines=[`倉庫（納品済みの保管在庫）　合計 ${vm.totals.barn}`,...vm.barn.map(r=>`${r.name}　${r.amount}個`)];if(page==="売り場")lines=[`売り場（お客さんが購入できる棚）　合計 ${vm.totals.market} / ${vm.totals.marketCapacity}`,`未回収売上　${state.economy.tillCoins}コイン`,`所持コイン　${state.economy.walletCoins}コイン`,...vm.market.map(r=>`${r.name}　${r.amount} / ${r.capacity}`)];if(page==="生産設備内")lines=["入力バッファ → 加工中に予約済み → 完成品バッファ",...vm.production.map(r=>`${r.location}　${r.stage==="input"?"入力バッファ":r.stage==="reserved"?"加工中に予約済み":"完成品バッファ"}　${r.name} ${r.amount}個`)];if(page==="集荷・集配")lines=vm.farmBuffers.map(r=>`${r.name}　${r.amount}個`);if(lines.length===1)lines.push("在庫はありません");const info=this.add.text(w/2,top+48,lines.join("\n"),{fontFamily:"system-ui",fontSize:compact?"14px":"18px",color:"#49382e",lineSpacing:compact?5:9,wordWrap:{width:w-40}}).setOrigin(.5,0);this.overlay.push(info);this.addModalButton(w-70,30,112,"閉じる",()=>this.closeOverlay());};
   private handleCollectionResult=(result:CollectionCommandResult):void=>{this.collectionResult=result.message;if(this.collectionOpenState)this.renderCollection();};
   private collectionCommand(command:CollectionCommand):void{this.game.events.emit(GAME_EVENTS.collectionAction,command);}
   private addModalButton(x:number,y:number,width:number,label:string,command:CollectionCommand|(()=>void),enabled=true,reason?:string):void{const b=new ModalButton(this,x,y,width,label,()=>typeof command==="function"?command():this.collectionCommand(command)).setEnabled(enabled,reason);this.modalButtons.push(b);this.overlay.push(b);}
@@ -155,7 +160,10 @@ export class UIScene extends Phaser.Scene {
   private openCollection=():void=>{if(this.overlay.length||!this.lastState)return;this.collectionOpenState=true;this.collectionPage=0;this.collectionResult="";this.renderCollection();};
   private handleModalKey=(event:KeyboardEvent):void=>{const now=performance.now(),duplicate=event.key===lastCollectionKey&&event.shiftKey===lastCollectionKeyShift&&now-lastCollectionKeyAt<30;if(!this.collectionOpenState||duplicate)return;lastCollectionKey=event.key;lastCollectionKeyShift=event.shiftKey;lastCollectionKeyAt=now;if(event.key==="Escape"){event.preventDefault();this.closeOverlay();return;}if(event.key==="Tab"){event.preventDefault();if(!this.modalButtons.length)return;this.modalFocus=(this.modalFocus+(event.shiftKey?-1:1)+this.modalButtons.length)%this.modalButtons.length;this.modalButtons.forEach((b,i)=>b.setFocused(i===this.modalFocus));}else if((event.key==="Enter"||event.key===" ")&&this.modalFocus>=0){event.preventDefault();this.modalButtons[this.modalFocus].trigger();}};
   getCollectionE2ESummary(){return{open:this.collectionOpenState,page:this.collectionPage,result:this.collectionResult,focusedCount:this.modalButtons.filter(button=>button.isFocused()).length,buttons:this.modalButtons.map(button=>button.getSerializableRect())};}
-  private openProcessing=(result=""):void=>{if(this.overlay.length||!this.lastState)return;this.overlayBase("加工場　生産管理");const state=this.lastState,w=this.scale.width,h=this.scale.height,land=state.processing.land;const availability=["processing-yard","grain-mill","bakery"].map(id=>getProcessingConstructionAvailability(id as "processing-yard"|MachineId,land,state.economy.walletCoins,state.landExpansion.eastCornFieldUnlocked,state.landExpansion.southChickenCoopUnlocked));const machineLine=(key:"mill"|"bakery")=>{const m=state.processing[key],recipe=m.activeCycle?RECIPES[m.activeCycle.recipeId].publicName:"なし";return `${key==="mill"?"製粉機":"ベーカリー"} Lv${m.level}　${getMachinePublicStatus(m)}　モード ${m.enabled?m.selectedMode:"停止"}\n加工 ${recipe}　残り ${(m.activeCycle?.remainingMs??0)/1000}秒\n入力 ${Object.entries(m.input.amounts).filter(([,n])=>n).map(([r,n])=>`${r} ${n}`).join(" / ")||"空"}　${Object.values(m.input.amounts).reduce((a,b)=>a+b,0)}/${m.input.capacity}\n出力 ${Object.entries(m.output.amounts).filter(([,n])=>n).map(([r,n])=>`${r} ${n}`).join(" / ")||"空"}　${Object.values(m.output.amounts).reduce((a,b)=>a+b,0)}/${m.output.capacity}`;};const prerequisites=availability.map(a=>`${a.facility}：${a.built?"建設済み":a.reason??`${a.cost}コイン`}`).join("　");const info=this.add.text(w/2,Math.max(62,h/2-325),`所持コイン ${state.economy.walletCoins}\n${prerequisites}\n\n${machineLine("mill")}\n\n${machineLine("bakery")}\n\nスタッフ　製粉 ${state.processing.millOperator.publicStatus}　製パン ${state.processing.baker.publicStatus}\n${result}`,{fontFamily:"system-ui",fontSize:w<600?"12px":"15px",color:result?"#7a3d24":"#49382e",align:"left",lineSpacing:4,wordWrap:{width:Math.min(920,w-40)}}).setOrigin(.5,0);this.overlay.push(info);const add=(x:number,y:number,label:string,machine:MachineId,mode:"auto"|"stop"|RecipeId,enabled:boolean)=>{const b=new ModalButton(this,x,y,Math.min(185,w/4-8),label,()=>{this.game.events.emit(GAME_EVENTS.processingAction,machine,mode);for(const item of this.overlay)item.destroy();this.overlay=[];this.time.delayedCall(0,()=>this.openProcessing(`${machine==="grain-mill"?"製粉機":"ベーカリー"}を「${label}」に変更しました`));}).setEnabled(enabled,enabled?undefined:"先に設備を建設してください");this.overlay.push(b);};const y=h-132;add(w/2-285,y,"自動","grain-mill","auto",state.processing.mill.built);add(w/2-95,y,"小麦粉を優先","grain-mill","mill-flour",state.processing.mill.built);add(w/2+95,y,"コーンミールを優先","grain-mill","mill-cornmeal",state.processing.mill.built);add(w/2+285,y,"停止","grain-mill","stop",state.processing.mill.built);add(w/2-285,y+55,"自動","bakery","auto",state.processing.bakery.built);add(w/2-95,y+55,"パンを優先","bakery","bakery-bread",state.processing.bakery.built);add(w/2+95,y+55,"コーンブレッドを優先","bakery","bakery-cornbread",state.processing.bakery.built);add(w/2+285,y+55,"停止","bakery","stop",state.processing.bakery.built);this.button(w-75,50,"閉じる",()=>this.closeOverlay());};
+  getInventoryE2ESummary(){return{carried:this.carriedText.text,barn:this.barnText.text,market:this.marketText.text,till:this.tillText.text,wallet:this.walletText.text,page:this.inventoryPage,overlayText:this.overlay.filter((item):item is Phaser.GameObjects.Text=>item instanceof Phaser.GameObjects.Text).map(item=>item.text),buttons:this.modalButtons.map(button=>button.getSerializableRect())};}
+  openInventoryE2E():void{this.openInventory();}
+  openProcessingE2E(page=0):void{this.processingPage=Math.max(0,Math.min(3,page));this.openProcessing();}
+  private openProcessing=(result=""):void=>{if(this.overlay.length||!this.lastState)return;this.overlayBase("加工場　生産管理");const state=this.lastState,w=this.scale.width,h=this.scale.height,compact=w<700||h<650,tabs=["建設","製粉機","ベーカリー","スタッフ"] as const,top=compact?74:92,tabWidth=Math.min(180,(w-28)/4);tabs.forEach((label,i)=>this.addModalButton(14+tabWidth/2+i*tabWidth,top,tabWidth-4,label,()=>{this.closeOverlay();this.processingPage=i;this.openProcessing();},i!==this.processingPage,"選択中"));let body="";const tab=tabs[this.processingPage];if(tab==="建設"){const labels={"processing-yard":"加工場用地","grain-mill":"製粉機",bakery:"ベーカリー"};body=(["processing-yard","grain-mill","bakery"] as const).map(id=>{const a=getProcessingConstructionAvailability(id,state.processing.land,state.economy.walletCoins,state.landExpansion.eastCornFieldUnlocked,state.landExpansion.southChickenCoopUnlocked);return `${labels[id]}\n${a.built?"建設済み":a.available?`建設できます　${a.cost}コイン`:a.reason}\n次の行動：${a.built?"設備を確認してください":"建設場所へ向かってください"}`;}).join("\n\n");}else if(tab==="スタッフ")body=`製粉スタッフ　${state.processing.millOperator.publicStatus}　Lv${state.processing.millOperator.level}\n運搬容量 ${state.processing.millOperator.level?4+state.processing.millOperator.level*2:0}\n\n製パンスタッフ　${state.processing.baker.publicStatus}　Lv${state.processing.baker.level}\n運搬容量 ${state.processing.baker.level?4+state.processing.baker.level*2:0}`;else{const key=tab==="製粉機"?"mill":"bakery",machineId=tab==="製粉機"?"grain-mill":"bakery",vm=createMachineViewModel(machineId,state.processing[key]);body=`${vm.name}　運転モード：${vm.mode}\n選択中レシピ：${vm.selectedRecipe}\n\n【次の行動】${vm.primaryAction}\n\n入力バッファ　${vm.input.join(" / ")||"空"}\n加工中に予約済み　${vm.reserved.join(" / ")||"なし"}\n進捗 ${vm.progress}%　残り ${vm.remaining}\n完成品バッファ　${vm.output.join(" / ")||"空"}\n\n${vm.recipes.map(card=>`［${card.name}］ ${card.formula}\n${card.duration}　${card.status}`).join("\n")}`;const modes=machineId==="grain-mill"?[["自動","auto"],["小麦粉を優先","mill-flour"],["コーンミールを優先","mill-cornmeal"],["停止","stop"]] as const:[["自動","auto"],["パンを優先","bakery-bread"],["コーンブレッドを優先","bakery-cornbread"],["停止","stop"]] as const;const y=h-72,bw=Math.min(180,(w-24)/4-4);modes.forEach(([label,mode],i)=>this.addModalButton(12+bw/2+i*(bw+4),y,bw,label,()=>{this.game.events.emit(GAME_EVENTS.processingAction,machineId,mode);this.closeOverlay();this.time.delayedCall(0,()=>this.openProcessing());},state.processing[key].built&&(mode==="stop"?state.processing[key].enabled:!(state.processing[key].enabled&&state.processing[key].selectedMode===mode)),"選択中または未建設"));}const info=this.add.text(w/2,top+48,`${body}${result?`\n${result}`:""}`,{fontFamily:"system-ui",fontSize:compact?"13px":"16px",color:"#49382e",lineSpacing:compact?3:6,wordWrap:{width:w-38}}).setOrigin(.5,0);this.overlay.push(info);this.addModalButton(w-70,30,112,"閉じる",()=>this.closeOverlay());};
   private closeOverlay():void{for(const item of this.overlay)item.destroy();this.overlay=[];this.modalButtons=[];this.modalFocus=-1;this.collectionOpenState=false;this.scene.resume("game");}
   getDirection(): Point {
     return this.joystick?.direction ?? { x: 0, y: 0 };
@@ -170,16 +178,15 @@ export class UIScene extends Phaser.Scene {
   private updateState(state: GameState): void {
     this.lastState = state;
     if(this.collectionOpenState)this.time.delayedCall(0,()=>{if(this.collectionOpenState)this.renderCollection();});
-    const carried = state.cargo; const total = getCarriedTotal(carried);
-    this.carriedText.setText(total ? `持ち物　${total} / ${carried.capacity}\n麦${carried.amounts.wheat}　とう${carried.amounts.corn}　卵${carried.amounts.egg}` : `持ち物\n空　0 / ${carried.capacity}`);
+    const carried = state.cargo,vm=createInventoryViewModel(state); const total = vm.totals.carried,compact=this.scale.width<520;
+    this.carriedText.setText(total ? [`持ち物　${total} / ${carried.capacity}`,...formatCompactRows(vm.carried,compact?2:3)].join("\n") : `持ち物\n空　0 / ${carried.capacity}`);
     const unlocked = state.landExpansion;
-    this.barnText.setText(["倉庫", `麦 ${state.barn.wheat}`, unlocked.eastCornFieldUnlocked ? `とうもろこし ${state.barn.corn}` : "", unlocked.southChickenCoopUnlocked ? `たまご ${state.barn.egg}` : "", state.processing.land.millBuilt ? `小麦粉 ${state.barn.flour}　コーンミール ${state.barn.cornmeal}` : "", state.processing.land.bakeryBuilt ? `パン ${state.barn.bread}　コーンブレッド ${state.barn.cornbread}` : ""].filter(Boolean).join("\n"));
-    this.marketText.setText(["売り場", `麦 ${state.market.wheat} / 8`, unlocked.eastCornFieldUnlocked ? `とうもろこし ${state.market.corn} / 8` : "", unlocked.southChickenCoopUnlocked ? `たまご ${state.market.egg} / 8` : "", state.processing.land.millBuilt ? `小麦粉 ${state.market.flour}/6　コーンミール ${state.market.cornmeal}/6` : "", state.processing.land.bakeryBuilt ? `パン ${state.market.bread}/6　コーンブレッド ${state.market.cornbread}/4` : ""].filter(Boolean).join("\n"));
+    this.barnText.setText([`倉庫　合計 ${vm.totals.barn}`,...formatCompactRows(vm.barn,compact?1:2)].join("\n"));
+    this.marketText.setText(["売り場",`販売棚 合計 ${vm.totals.market} / ${vm.totals.marketCapacity}`,...formatCompactRows(vm.market,compact?1:2)].join("\n"));
     this.livestockText.setVisible(unlocked.southChickenCoopUnlocked).setText(`鶏小屋\n餌 ${state.livestock.feed} / ${state.livestock.feedCapacity}　卵 ${state.livestock.eggs} / ${state.livestock.eggCapacity}\n飼育 ${state.workers.poultryCaretaker.status}`);
     if(state.dairy.pastureUnlocked)this.livestockText.setVisible(true).setText(`${this.livestockText.text}\n酪農　牛 ${state.dairy.cows.length}/3　草 ${state.dairy.hayRack}/24　乳 ${state.dairy.milkTank}/24${state.dairy.workshopBuilt?`\n工房 ${state.dairy.cycle?`${state.dairy.cycle.recipe} 加工中`:"待機"}`:""}`);
-    this.tillText.setText(`売上  ${state.economy.tillCoins}`);
-    this.walletText.setText(`コイン  ${state.economy.walletCoins}`);
-    const compact = this.scale.width < 520;
+    this.tillText.setText(`未回収売上  ${state.economy.tillCoins}コイン`);
+    this.walletText.setText(`所持コイン  ${state.economy.walletCoins}コイン`);
     this.crateText.setText(
       `${compact ? "集荷" : "集荷箱"}  ${state.inventory.fieldCrate}/${state.inventory.fieldCrateCapacity}`,
     );

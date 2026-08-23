@@ -1,6 +1,6 @@
 import Phaser from 'phaser';
 import { palette } from '../art/palette';
-import { RESOURCE_IDS, emptyResourceAmounts, type ResourceAmounts } from '../config/resourceDefinitions';
+import { RESOURCE_DEFINITIONS, RESOURCE_IDS, emptyResourceAmounts, type ResourceAmounts, type ResourceId } from '../config/resourceDefinitions';
 export type Facing = 'front' | 'back' | 'left' | 'right';
 
 export class Farmer extends Phaser.GameObjects.Container {
@@ -40,6 +40,7 @@ export class Farmer extends Phaser.GameObjects.Container {
   setCargo(amounts: ResourceAmounts, capacity: number): void {
     this.cargo = { ...amounts }; this.cargoCapacity = capacity; this.drawStack();
   }
+  getCargoArtCategories():string[]{return RESOURCE_IDS.filter(id=>this.cargo[id]>0).map(id=>RESOURCE_DEFINITIONS[id].artCategory);}
 
   playHarvestMotion(): void {
     this.scene.tweens.killTweensOf(this);
@@ -89,22 +90,33 @@ export class Farmer extends Phaser.GameObjects.Container {
     if (total <= 0) return;
     const behind = this.facing === 'back';
     const xShift = this.facing === 'left' ? 23 : this.facing === 'right' ? -23 : behind ? 20 : -24;
-    const resources = RESOURCE_IDS.flatMap((id) => Array(Math.min(this.cargo[id], 8)).fill(id));
+    const resources:ResourceId[] = RESOURCE_IDS.flatMap((id) => Array<ResourceId>(Math.min(this.cargo[id], 8)).fill(id));
     for (let i = 0; i < resources.length; i += 1) {
       const row = Math.floor(i / 4); const col = i % 4;
       const x = xShift + (col - 1) * 10 + (row % 2) * 4;
       const y = 49 - row * 10;
       g.lineStyle(1.5, palette.outline);
       const resource = resources[i];
-      if (resource === "egg") {
+      const category=RESOURCE_DEFINITIONS[resource].artCategory,color=RESOURCE_DEFINITIONS[resource].color;
+      if (category === "egg-crate") {
         g.fillStyle(palette.path).fillRoundedRect(x - 6, y - 6, 13, 10, 2).strokeRoundedRect(x - 6, y - 6, 13, 10, 2);
         g.fillStyle(palette.cream).fillEllipse(x, y - 4, 7, 9);
-      } else if (resource === "corn") {
-        g.fillStyle(0xf2c84b).fillEllipse(x, y - 5, 8, 14).strokeEllipse(x, y - 5, 8, 14);
+      } else if (category === "crop" && resource === "corn") {
+        g.fillStyle(color).fillEllipse(x, y - 5, 8, 14).strokeEllipse(x, y - 5, 8, 14);
         g.lineStyle(2, palette.foliage).lineBetween(x - 4, y, x - 8, y - 9).lineBetween(x + 4, y, x + 8, y - 9);
-      } else {
+      } else if(category==="crop") {
         g.fillStyle(palette.wheat).fillRoundedRect(x - 6, y - 6, 13, 10, 3).strokeRoundedRect(x - 6, y - 6, 13, 10, 3);
         g.lineStyle(2, palette.wheatLight).lineBetween(x, y - 6, x + 3, y - 13);
+      } else if(category==="sack"){
+        g.fillStyle(color).fillRoundedRect(x-6,y-10,13,14,4).strokeRoundedRect(x-6,y-10,13,14,4);g.lineBetween(x-4,y-7,x+4,y-7);
+      } else if(category==="bread-tray"){
+        g.fillStyle(palette.path).fillRoundedRect(x-8,y-4,17,7,2).strokeRoundedRect(x-8,y-4,17,7,2);g.fillStyle(color).fillEllipse(x,y-7,13,8).strokeEllipse(x,y-7,13,8);
+      } else if(category==="hay-bale"){
+        g.fillStyle(color).fillRoundedRect(x-7,y-9,15,13,2).strokeRoundedRect(x-7,y-9,15,13,2);g.lineBetween(x,y-9,x,y+4);
+      } else if(category==="milk-can"){
+        g.fillStyle(color).fillRoundedRect(x-6,y-9,13,14,3).strokeRoundedRect(x-6,y-9,13,14,3);g.strokeCircle(x,y-10,4);
+      } else {
+        g.fillStyle(color).fillRoundedRect(x-7,y-8,15,12,3).strokeRoundedRect(x-7,y-8,15,12,3);g.lineBetween(x-4,y-2,x+4,y-2);
       }
     }
     if (total >= this.cargoCapacity) g.lineStyle(3, 0xb9573f).lineBetween(xShift - 20, 43, xShift + 25, 20);

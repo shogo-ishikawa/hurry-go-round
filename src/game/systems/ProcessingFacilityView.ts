@@ -1,6 +1,6 @@
 import Phaser from "phaser";
 import { palette } from "../art/palette";
-import { getBufferTotal, getMachinePublicStatus } from "../logic/processing";
+import { RECIPES, getBufferTotal, getMachinePublicStatus } from "../logic/processing";
 import type { GameState } from "../state/GameState";
 import { InteractionStationView } from "./InteractionStationView";
 
@@ -35,7 +35,7 @@ export class ProcessingFacilityView {
     this.stations.millInput.setVisible(true).setEnabled(mill.built);this.stations.millOutput.setVisible(true).setEnabled(mill.built);this.stations.bakeryInput.setVisible(true).setEnabled(bakery.built);this.stations.bakeryOutput.setVisible(true).setEnabled(bakery.built);
     this.millStorage.setVisible(mill.built).setText(`原料　麦 ${mill.input.amounts.wheat}　とうもろこし ${mill.input.amounts.corn}　${getBufferTotal(mill.input)}/${mill.input.capacity}\n${getBufferTotal(mill.output)?`完成品　小麦粉 ${mill.output.amounts.flour}　ミール ${mill.output.amounts.cornmeal}`:"完成品はまだありません"}`);
     this.bakeryStorage.setVisible(bakery.built).setText(`原料　粉 ${bakery.input.amounts.flour}　ミール ${bakery.input.amounts.cornmeal}　卵 ${bakery.input.amounts.egg}　${getBufferTotal(bakery.input)}/${bakery.input.capacity}\n${getBufferTotal(bakery.output)?`完成品　パン ${bakery.output.amounts.bread}　コーンパン ${bakery.output.amounts.cornbread}`:"完成品はまだありません"}`);
-    const status=(machine:typeof mill)=>`${getMachinePublicStatus(machine)}${machine.activeCycle?`　${machine.activeCycle.recipeId}\n残り ${(machine.activeCycle.remainingMs/1000).toFixed(1)}秒　入力 ${getBufferTotal(machine.input)}　出力 ${getBufferTotal(machine.output)}`:""}`;this.millStatus.setVisible(mill.built).setText(status(mill));this.bakeryStatus.setVisible(bakery.built).setText(status(bakery));if(mill.activeCycle)this.gear.rotation+=delta*.004;
+    const status=(name:string,machine:typeof mill)=>{const output=getBufferTotal(machine.output);if(machine.activeCycle){const progress=Math.round((1-machine.activeCycle.remainingMs/machine.activeCycle.durationMs)*100);return`${name}\n${RECIPES[machine.activeCycle.recipeId].publicName}を製造中 ${progress}%\n完成品 ${output}`;}return`${name}\n${getMachinePublicStatus(machine)}${output?`　完成品 ${output}`:""}`;};this.millStatus.setVisible(mill.built).setText(status("製粉機",mill));this.bakeryStatus.setVisible(bakery.built).setText(status("ベーカリー",bakery));if(mill.activeCycle)this.gear.rotation+=delta*.004;
   }
   setStationHighlighted(id:"mill-input"|"mill-output"|"bakery-input"|"bakery-output",value:boolean):void{this.stations[id==="mill-input"?"millInput":id==="mill-output"?"millOutput":id==="bakery-input"?"bakeryInput":"bakeryOutput"].setHighlighted(value);}
   destroy():void{for(const object of this.objects)object.destroy();for(const station of Object.values(this.stations))station.destroy();}
