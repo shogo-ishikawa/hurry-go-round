@@ -166,7 +166,8 @@ test("restores active processing cycles and existing output exactly once", async
     millActiveRecipe: null,
   });
 
-  // Produce one completed bakery item through the real path as well.
+  // Moving to the bakery station resets the previous input station's bounded
+  // empty-input notification cooldown before the new ingredients are loaded.
   await configure(page, 1000, { flour: 1, egg: 1 });
   await at(page, "transfer-bakery-input", 400);
   await advance(page, 5600);
@@ -175,6 +176,11 @@ test("restores active processing cycles and existing output exactly once", async
     bakeryOutput: { bread: 1 },
     bakeryActiveRecipe: null,
   });
+
+  // Leave the bakery input zone before supplying another batch. This models a
+  // real station transition and prevents an intentional no-input message
+  // cooldown from delaying the newly supplied ingredients.
+  await at(page, "build-bakery", 40);
 
   // Start fresh cycles immediately before saving. Both cycles retain ample
   // remaining time, so normal post-load frame progression cannot be mistaken
