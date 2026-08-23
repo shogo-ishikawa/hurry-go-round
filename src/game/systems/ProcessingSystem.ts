@@ -295,7 +295,7 @@ export class ProcessingSystem {
     this.transferCooldown = Math.max(0, this.transferCooldown - delta);
     if (this.transferCooldown > 0) return;
 
-    const [interaction, id, direction] = selected;
+    const [, id, direction] = selected;
     const key = id === "grain-mill" ? "mill" : "bakery";
 
     if (!state.processing[key].built) {
@@ -326,12 +326,17 @@ export class ProcessingSystem {
           );
 
     if (result.changed) {
+      const resource = result.resource;
+      if (!resource) {
+        throw new Error("Changed processing transfer did not identify a resource");
+      }
+
       if (direction === "input") {
         this.inputCursor[id] = result.nextCursor;
-        this.lastManualInputResource = result.resource;
+        this.lastManualInputResource = resource;
       } else {
         this.outputCursor[id] = result.nextCursor;
-        this.lastManualOutputResource = result.resource;
+        this.lastManualOutputResource = resource;
       }
 
       this.setState({
@@ -345,11 +350,9 @@ export class ProcessingSystem {
       this.transferCooldown = 160;
       this.scene.game.events.emit(
         GAME_EVENTS.hint,
-        `${direction === "input" ? "搬入中　" : "回収中　"}${
-          result.resource
-        }\n持ち物 ${beforeCargo[result.resource]} → ${
-          result.cargo.amounts[result.resource]
-        }`,
+        `${direction === "input" ? "搬入中　" : "回収中　"}${resource}\n持ち物 ${
+          beforeCargo[resource]
+        } → ${result.cargo.amounts[resource]}`,
       );
       this.publish();
       return;
