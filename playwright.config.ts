@@ -4,7 +4,7 @@ export default defineConfig({
   testDir: "tests/e2e",
   fullyParallel: false,
   workers: process.env.CI ? 1 : undefined,
-  retries: 1,
+  retries: 0,
   timeout: 90_000,
   use: {
     baseURL: "http://127.0.0.1:4173/hurry-go-round/",
