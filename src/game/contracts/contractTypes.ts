@@ -37,3 +37,13 @@ export interface ContractState {
   deliveryCursor: ResourceId | null;
   declineCooldownMs: number;
 }
+
+export type ContractCommand = "accept" | "decline" | "cancel" | "deliver" | "complete";
+export type ContractFailure = "offer-not-found" | "active-contract-exists" | "no-active-contract" | "no-deliverable-stock" | "contract-incomplete" | "button-debounce";
+export interface ContractCommandResult {
+  changed: boolean;
+  command: ContractCommand;
+  message: string;
+  reason?: ContractFailure;
+  prioritySaveRequested: boolean;
+}

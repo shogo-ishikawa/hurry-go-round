@@ -209,6 +209,7 @@ export const GAME_EVENTS = {
   contractRange: "contract-range",
   contractOpen: "contract-open",
   contractAction: "contract-action",
+  contractResult: "contract-command-result",
   operationsRange: "operations-range",
   operationsOpen: "operations-open",
   operationsAction: "operations-action",
