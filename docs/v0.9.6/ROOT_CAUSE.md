@@ -1,10 +1,12 @@
 # v0.9.6 Root-Cause Analysis
 
-This document records the code-level causes found in the v0.9.5 `main` branch at commit:
+This document records the code-level causes found in the accepted v0.9.5 `main` branch at commit:
 
 ```text
-e2592248d3065946c00dd7df2422e623a6ec4f35
+a2d323b6e96a678f022dfe1beb3957b2c0fd5abd
 ```
+
+PR #35 added collection-browser acceptance instrumentation and tests. It did not change the product behavior responsible for the manual-play failures analyzed below.
 
 ## 1. Worker training repeatedly behaves as Lv1 -> Lv2
 
@@ -229,6 +231,6 @@ Required correction:
 
 ## 10. Testing gap
 
-The current browser suite verifies save recovery, wheat batching, and processing. The merged Phase 3 did not add a collection E2E file, and none of the nine manual-play failures above is fully covered.
+The current browser suite now covers save recovery, wheat batching, processing, and v0.9.5 collection acceptance. It still does not cover the nine manual-play failures above, especially farm-worker Lv3 training, player corn-crate pickup, poultry progression, truthful eleven-resource HUD output, repeated contract decline, and non-egg contract delivery.
 
-v0.9.6 must add browser tests for the visible player flows, not only pure logic.
+v0.9.6 must add browser tests for these visible player flows, not only pure logic.
