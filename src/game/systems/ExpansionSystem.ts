@@ -18,7 +18,7 @@ import {
 import {
   collectEggOne,
   depositCornFeedOne,
-  produceEggOne,
+  produceEggBatch, getCoopParameters, upgradeCoop,
 } from "../logic/livestock";
 import {
   getCornFieldCrateCapacity,
@@ -29,6 +29,7 @@ import {
 } from "../logic/cornFieldExpansion";
 import { GAME_EVENTS, type GameState } from "../state/GameState";
 import { palette } from "../art/palette";
+import { INTERACTIONS } from "../logic/facilities";
 
 export class ExpansionSystem {
   private readonly corn: CornNode[] = [];
@@ -38,7 +39,10 @@ export class ExpansionSystem {
   private harvestTimer = 0;
   private feedTimer = 0;
   private eggPickupTimer = 0;
-  private eggProductionTimer = GAME_CONFIG.eggProductionIntervalMs;
+  private eggProductionTimer:number = GAME_CONFIG.eggProductionIntervalMs;
+  private cornPickupTimer=0;
+  private coopUpgradeTimer=0;
+  private coopUpgradeArmed=true;
   private purchaseTimer = 0;
   private purchaseId: LandExpansionId | null = null;
   private carryTimer = 0;
@@ -61,6 +65,8 @@ export class ExpansionSystem {
     private getState: () => GameState,
     private setState: (state: GameState) => void,
   ) {
+    const restored=scene.registry.get("restored-egg-remaining") as number|undefined;
+    if(typeof restored==="number")this.eggProductionTimer=restored;
     const positions: Array<[number, number]> = [];
 
     // Initial 24 plants.
@@ -100,12 +106,12 @@ export class ExpansionSystem {
     );
 
     const colors = [palette.cream, 0xd9b784, 0xa96d43];
-    for (let index = 0; index < 3; index += 1) {
+    for (let index = 0; index < 7; index += 1) {
       this.chickens.push(
         new Chicken(
           scene,
-          1090 + index * 90,
-          1640,
+          1000 + (index%4) * 90,
+          1600+Math.floor(index/4)*80,
           colors[index] ?? palette.cream,
           index,
         ),
@@ -128,6 +134,8 @@ export class ExpansionSystem {
     ]);
     new WorldSign(scene, 930, 1540, [UI_TEXT.facilities.feed]);
     new WorldSign(scene, 1410, 1540, [UI_TEXT.facilities.eggs]);
+    new WorldSign(scene, 2480, 820, ["とうもろこしの集荷箱"]);
+    new WorldSign(scene, 760, 1430, ["鶏を増やす","420コイン"]);
 
     this.cornExpansionPad = this.makeCornExpansionPad();
     this.cornExpansionProgress = scene.add
@@ -144,6 +152,7 @@ export class ExpansionSystem {
     this.harvestTimer = Math.max(0, this.harvestTimer - delta);
     this.feedTimer = Math.max(0, this.feedTimer - delta);
     this.eggPickupTimer = Math.max(0, this.eggPickupTimer - delta);
+    this.cornPickupTimer=Math.max(0,this.cornPickupTimer-delta);
 
     const state = this.getState();
     this.syncDerivedCornCapacity(state);
@@ -156,11 +165,13 @@ export class ExpansionSystem {
         this.corn[index]?.tick(delta);
       }
       this.tryHarvestCorn();
+      this.updateCornCratePickup();
     }
 
     if (state.landExpansion.southChickenCoopUnlocked) {
       for (const chicken of this.chickens) chicken.tick(delta);
       this.updateLivestock(delta);
+      this.updateCoopUpgrade(delta);
     }
 
     this.updateLandPurchase(delta);
@@ -253,7 +264,7 @@ export class ExpansionSystem {
     this.eggProductionTimer -= delta;
     if (this.eggProductionTimer <= 0) {
       this.eggProductionTimer += GAME_CONFIG.eggProductionIntervalMs;
-      const result = produceEggOne(state.livestock);
+      const result = produceEggBatch(state.livestock,getCoopParameters(state.coopLevel).eggBatch);
       if (result.changed) {
         state = { ...state, livestock: result.livestock };
         this.setState(state);
@@ -276,6 +287,12 @@ export class ExpansionSystem {
       }
     }
   }
+
+  getEggRemainingMs():number{return Math.max(0,Math.round(this.eggProductionTimer));}
+
+  private updateCornCratePickup():void{const action=INTERACTIONS.find(i=>i.id==="collect-corn-crate")!;if(!this.near({...action.center,radius:action.radius})||this.cornPickupTimer>0)return;const state=this.getState();const total=Object.values(state.cargo.amounts).reduce((a,b)=>a+b,0);if(state.automation.cornFieldCrate<=0||total>=state.cargo.capacity)return;const cargo={...state.cargo,amounts:{...state.cargo.amounts,corn:state.cargo.amounts.corn+1}};this.setState({...state,cargo,automation:{...state.automation,cornFieldCrate:state.automation.cornFieldCrate-1}});this.farmer.setCargo(cargo.amounts,cargo.capacity);this.cornPickupTimer=160;this.scene.game.events.emit(GAME_EVENTS.dirty);}
+
+  private updateCoopUpgrade(delta:number):void{const state=this.getState(),point={x:760,y:1510,radius:82};const near=this.near(point);if(!near){this.coopUpgradeTimer=0;this.coopUpgradeArmed=true;return;}if(!this.coopUpgradeArmed)return;const keyboard=this.scene.input.keyboard;const immediate=!!keyboard&&(Phaser.Input.Keyboard.JustDown(keyboard.addKey("E"))||Phaser.Input.Keyboard.JustDown(keyboard.addKey("SPACE")));this.coopUpgradeTimer+=immediate?1200:delta;if(this.coopUpgradeTimer<1100)return;this.coopUpgradeTimer=0;this.coopUpgradeArmed=false;const result=upgradeCoop(state.economy.walletCoins,state.coopLevel,state.livestock);if(!result.changed){this.scene.game.events.emit(GAME_EVENTS.hint,result.reason==="maximum-level"?"鶏は最大数です":"コインが足りません");return;}this.setState({...state,coopLevel:result.level,livestock:result.livestock,economy:{...state.economy,walletCoins:result.wallet}});this.syncVisibility();this.scene.game.events.emit(GAME_EVENTS.dirty,"priority");this.scene.game.events.emit(GAME_EVENTS.hint,`鶏を${getCoopParameters(result.level).chickens}羽へ増やしました`);}
 
   private updateLandPurchase(delta: number): void {
     const state = this.getState();
@@ -325,6 +342,7 @@ export class ExpansionSystem {
         walletCoins: result.walletCoins,
       },
       landExpansion: result.land,
+      coopLevel:id==="southChickenCoop"?1:state.coopLevel,
     });
     this.syncVisibility();
     this.scene.game.events.emit(GAME_EVENTS.dirty, "priority");
@@ -667,8 +685,8 @@ export class ExpansionSystem {
       land.eastCornFieldUnlocked && level >= 2,
     );
 
-    for (const chicken of this.chickens) {
-      chicken.setVisible(land.southChickenCoopUnlocked);
+    for (const [index,chicken] of this.chickens.entries()) {
+      chicken.setVisible(land.southChickenCoopUnlocked&&index<getCoopParameters(state.coopLevel).chickens);
     }
 
     this.eastSign.setVisible(!land.eastCornFieldUnlocked);

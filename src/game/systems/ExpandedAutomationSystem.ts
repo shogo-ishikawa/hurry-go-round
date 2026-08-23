@@ -10,7 +10,9 @@ import {
   getPoultryFeedBatchAmount,
   shouldDepartWithBatch,
 } from "../logic/automationBatching";
-import { INTERACTIONS } from "../logic/facilities";
+import { FACILITIES, INTERACTIONS } from "../logic/facilities";
+import { depositCornBatch } from "../logic/cornCrate";
+import { getPoultryTargets } from "../logic/livestock";
 import { choosePoultryTask } from "../logic/poultryAutomation";
 import {
   availabilityText,
@@ -83,7 +85,7 @@ const STATE_KEY: Record<AutomationRole, WorkerKey> = {
   "poultry-caretaker": "poultryCaretaker",
 };
 
-const CORN_CRATE = { x: 2480, y: 900 } as const;
+const CORN_CRATE = FACILITIES.find(f=>f.id==="corn-field-crate")!.landmarkPoint;
 const BARN = { x: 1450, y: 610 } as const;
 const FEED_TROUGH = { x: 980, y: 1610 } as const;
 const EGG_STORAGE = { x: 1390, y: 1620 } as const;
@@ -448,7 +450,8 @@ export class ExpandedAutomationSystem {
           parameters.operationIntervalMultiplier;
         if (runtime.timer < interval) return;
         runtime.timer -= interval;
-        const remaining = current.carried - 1;
+        const transfer=depositCornBatch(latest.automation.cornFieldCrate,latest.automation.cornFieldCrateCapacity,current.carried);
+        const remaining = transfer.carried;
         const nextState = this.patchWorker(latest, "corn-harvester", {
           carried: remaining,
           status:
@@ -460,9 +463,10 @@ export class ExpandedAutomationSystem {
           ...nextState,
           automation: {
             ...nextState.automation,
-            cornFieldCrate: nextState.automation.cornFieldCrate + 1,
+            cornFieldCrate: transfer.crate,
           },
         });
+        this.scene.game.events.emit(GAME_EVENTS.hint,transfer.deposited>0?`とうもろこしを${transfer.deposited}個格納しました`:"とうもろこし集荷箱が満杯です");
         if (remaining <= 0) {
           this.setStage(runtime, "corn-find", "とうもろこし畑へ戻ります");
         }
@@ -595,6 +599,7 @@ export class ExpandedAutomationSystem {
       worker.level,
     );
 
+    const targets=getPoultryTargets(state.coopLevel);
     switch (runtime.stage) {
       case "care-select": {
         if (worker.carried > 0 && worker.resource === "corn") {
@@ -609,8 +614,8 @@ export class ExpandedAutomationSystem {
         }
         const task = choosePoultryTask(
           state.livestock.feed,
-          GAME_CONFIG.poultryFeedTarget,
-          GAME_CONFIG.poultryFeedEmergencyThreshold,
+          targets.feedTarget,
+          targets.emergencyThreshold,
           state.barn.corn,
           state.livestock.eggs,
         );
@@ -644,7 +649,7 @@ export class ExpandedAutomationSystem {
         const loadable = getPoultryFeedBatchAmount(
           latest.barn.corn,
           latest.livestock.feed + current.carried,
-          GAME_CONFIG.poultryFeedTarget,
+          targets.feedTarget,
           Math.max(0, parameters.capacity - current.carried),
         );
         if (loadable <= 0) {
@@ -673,7 +678,7 @@ export class ExpandedAutomationSystem {
         });
         if (
           carried >= parameters.capacity ||
-          latest.livestock.feed + carried >= GAME_CONFIG.poultryFeedTarget ||
+          latest.livestock.feed + carried >= targets.feedTarget ||
           latest.barn.corn - 1 <= 0
         ) {
           this.setStage(runtime, "care-to-feed", "餌箱へまとめて運搬中");
