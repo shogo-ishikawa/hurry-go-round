@@ -11,8 +11,9 @@ import {
   depositHarvestWorkerBatch,
   getAutomationWheatTotal,
   harvestWorkerCollectOne,
-  loadTransportWorkerOne,
-  unloadTransportWorkerOne,
+  decideTransportLoad,
+  loadTransportWorkerBatch,
+  unloadTransportWorkerBatch,
   type AutomationState,
   selectNearestReadyWheatNode,
 } from "../logic/workers";
@@ -48,6 +49,10 @@ export class WorkerSystem {
   private pickupTimer = 0;
   private loadTimer = 0;
   private unloadTimer = 0;
+  private transportWaitMs = 0;
+  private lastTransportLoadedBatchSize=0;
+  private lastTransportUnloadedBatchSize=0;
+  private completedTransportDeliveries=0;
   private routeIndex = 0;
   private crateFullNotified = false;
   private fieldEmptyElapsed = 0;
@@ -92,8 +97,8 @@ export class WorkerSystem {
         WORKER_ROUTES.home.x,
         WORKER_ROUTES.home.y,
       );
-      this.transportPhase = "returning-to-crate";
-      this.transporter.setStatus("集荷箱へ戻っています");
+      this.transportPhase = s.workers.transportWorker.carried>0?"moving-to-barn":"returning-to-crate";
+      this.transporter.setStatus(s.workers.transportWorker.carried>0?"倉庫へ運搬中":"集荷箱へ戻っています");
       this.routeIndex = 0;
     }
   }
@@ -296,10 +301,10 @@ export class WorkerSystem {
     }
   }
   private updateTransporter(delta: number): void {
-    const w = this.transporter!;
+    const w = this.transporter!,runtime=this.getState(),params=getWheatWorkerRuntimeParameters("wheat-transporter",runtime.workers.transportWorker.level);
     if (this.transportPhase === "returning-to-crate") {
       const p = WORKER_ROUTES.transportToCrate[this.routeIndex];
-      if (p && w.moveToward(p, delta, GAME_CONFIG.transportWorkerMoveSpeed)) {
+      if (p && w.moveToward(p, delta, params.moveSpeed)) {
         this.routeIndex++;
         if (this.routeIndex >= WORKER_ROUTES.transportToCrate.length) {
           this.routeIndex = 0;
@@ -310,24 +315,18 @@ export class WorkerSystem {
       this.transportPhase === "idle-at-crate" ||
       this.transportPhase === "loading"
     ) {
-      const s = this.getState();
-      if (s.inventory.fieldCrate <= 0) {
-        if (s.workers.transportWorker.carried > 0) {
-          this.routeIndex = 0;
-          this.setTransportPhase("moving-to-barn");
-        } else this.setTransportPhase("idle-at-crate");
-        return;
-      }
+      const s = this.getState();this.transportWaitMs+=delta;
+      const decision=decideTransportLoad(s.inventory.fieldCrate,s.workers.transportWorker.carried,params.capacity,this.transportWaitMs);
+      if(decision==="moving-to-barn"){this.transportWaitMs=0;this.routeIndex=0;this.setTransportPhase("moving-to-barn");return;}
+      if(decision==="idle-at-crate"){this.setTransportPhase("idle-at-crate");return;}
       this.setTransportPhase("loading");
       this.loadTimer += delta;
-      if (this.loadTimer < GAME_CONFIG.transportWorkerLoadIntervalMs) return;
-      this.loadTimer -= GAME_CONFIG.transportWorkerLoadIntervalMs;
-      const r = loadTransportWorkerOne(
-        this.automation(s),
-        GAME_CONFIG.transportWorkerCarryCapacity,
-      );
+      if (this.loadTimer < params.operationIntervalMs) return;
+      this.loadTimer = 0;
+      const r = loadTransportWorkerBatch(this.automation(s),params.capacity);
       if (r.changed) {
         this.apply(s, r.state);
+        this.lastTransportLoadedBatchSize=r.transferred;
         this.effect(
           GAME_CONFIG.fieldCrate.x,
           GAME_CONFIG.fieldCrate.y,
@@ -335,8 +334,7 @@ export class WorkerSystem {
           w.y - 35,
         );
         if (
-          r.state.transportWorker.carried >=
-          GAME_CONFIG.transportWorkerCarryCapacity
+          decideTransportLoad(r.state.inventory.fieldCrate,r.state.transportWorker.carried,params.capacity,this.transportWaitMs)==="moving-to-barn"
         ) {
           this.routeIndex = 0;
           this.setTransportPhase("moving-to-barn");
@@ -344,7 +342,7 @@ export class WorkerSystem {
       }
     } else if (this.transportPhase === "moving-to-barn") {
       const p = WORKER_ROUTES.transportToBarn[this.routeIndex];
-      if (p && w.moveToward(p, delta, GAME_CONFIG.transportWorkerMoveSpeed)) {
+      if (p && w.moveToward(p, delta, params.moveSpeed)) {
         this.routeIndex++;
         if (this.routeIndex >= WORKER_ROUTES.transportToBarn.length) {
           this.routeIndex = 0;
@@ -359,12 +357,13 @@ export class WorkerSystem {
         return;
       }
       this.unloadTimer += delta;
-      if (this.unloadTimer < GAME_CONFIG.transportWorkerUnloadIntervalMs)
+      if (this.unloadTimer < params.operationIntervalMs)
         return;
-      this.unloadTimer -= GAME_CONFIG.transportWorkerUnloadIntervalMs;
-      const r = unloadTransportWorkerOne(this.automation(s));
+      this.unloadTimer = 0;
+      const r = unloadTransportWorkerBatch(this.automation(s));
       if (r.changed) {
         this.apply(s, r.state, { firstAutomatedBarnDelivery: true });
+        this.lastTransportUnloadedBatchSize=r.transferred;this.completedTransportDeliveries++;
         this.effect(w.x, w.y, GAME_CONFIG.delivery.x, GAME_CONFIG.delivery.y);
         this.tutorial(14);
       }
@@ -394,6 +393,7 @@ export class WorkerSystem {
     this.emptyCrateTripCount = 0;
     this.ensureWorkers();
   }
+  resetWheatTransporterForE2E():void{this.transporter?.destroy();this.transporter=undefined;this.transportPhase="idle-at-crate";this.routeIndex=0;this.loadTimer=0;this.unloadTimer=0;this.transportWaitMs=0;this.lastTransportLoadedBatchSize=0;this.lastTransportUnloadedBatchSize=0;this.completedTransportDeliveries=0;this.ensureWorkers();}
   getWheatDiagnostics() {
     return {
       workerPhase: this.harvestPhase,
@@ -403,6 +403,7 @@ export class WorkerSystem {
       lastDepositedBatchSize: this.lastDepositedBatchSize,
       completedDepositCount: this.completedDepositCount,
       emptyCrateTripCount: this.emptyCrateTripCount,
+      transportPhase:this.transportPhase,lastTransportLoadedBatchSize:this.lastTransportLoadedBatchSize,lastTransportUnloadedBatchSize:this.lastTransportUnloadedBatchSize,completedTransportDeliveries:this.completedTransportDeliveries,
     };
   }
   private setHarvestPhase(p: HarvestWorkerPhase): void {

@@ -6,7 +6,7 @@ import { GAME_EVENTS, type GameState } from "../state/GameState";
 import type { Point } from "../logic/movement";
 import { palette as colors } from "../art/palette";
 import { getCarriedTotal } from "../logic/resources";
-import { WORKER_ROLE_IDS, WORKER_ROLES, getWorkerTrainingCost, type WorkerRoleId } from "../logic/workforce";
+import { WORKER_ROLE_IDS, WORKER_ROLES, getWheatWorkerRuntimeParameters, getWorkerTrainingCost, type WorkerRoleId } from "../logic/workforce";
 import { getProcessingConstructionAvailability } from "../logic/processing";
 import { ModalButton } from "./ModalButton";
 import { COLLECTION_SOURCES, getCollectionPanelViewModel, type CollectionCommand, type CollectionCommandResult, type CollectionRoutingMode } from "../logic/collectionNetwork";
@@ -65,7 +65,7 @@ export class UIScene extends Phaser.Scene {
     this.marketText = this.add.text(0, 0, "売り場\n麦 0 / 8", style);
     this.tillText = this.add.text(0, 0, "売上  0", style);
     this.walletText = this.add.text(0, 0, "コイン  0", style);
-    this.versionText = this.add.text(0, 0, "v0.9.7", {
+    this.versionText = this.add.text(0, 0, "v0.9.8", {
       ...style,
       fontSize: "14px",
       color: "#755c49",
@@ -260,7 +260,7 @@ export class UIScene extends Phaser.Scene {
       `${compact ? "収穫" : "収穫スタッフ"}  ${state.workers.harvestWorker.status}`,
     );
     this.transportWorkerText.setText(
-      `${compact ? "運搬" : "運搬スタッフ"}  ${state.workers.transportWorker.status}`,
+      `${compact ? "運搬" : "運搬スタッフ"}  ${state.workers.transportWorker.status}　${state.workers.transportWorker.carried}/${getWheatWorkerRuntimeParameters("wheat-transporter",state.workers.transportWorker.level).capacity}`,
     );
     this.drawMeters();
   }

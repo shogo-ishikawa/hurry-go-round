@@ -113,6 +113,16 @@ export function loadTransportWorkerOne(
     true,
   );
 }
+export interface TransportBatchResult extends TransferResult { transferred:number }
+export function loadTransportWorkerBatch(s:AutomationState,max:number):TransportBatchResult{
+ const transferred=s.transportWorker.hired?Math.min(Math.max(0,s.inventory.fieldCrate),Math.max(0,max-s.transportWorker.carried)):0;
+ if(transferred<=0)return{state:s,changed:false,transferred:0};
+ return{state:{...s,inventory:{...s.inventory,fieldCrate:s.inventory.fieldCrate-transferred},transportWorker:{...s.transportWorker,carried:s.transportWorker.carried+transferred}},changed:true,transferred};
+}
+export function unloadTransportWorkerBatch(s:AutomationState):TransportBatchResult{
+ const transferred=Math.max(0,s.transportWorker.carried);if(transferred<=0)return{state:s,changed:false,transferred:0};
+ return{state:{...s,inventory:{...s.inventory,barn:s.inventory.barn+transferred},transportWorker:{...s.transportWorker,carried:0}},changed:true,transferred};
+}
 export function unloadTransportWorkerOne(s: AutomationState): TransferResult {
   if (s.transportWorker.carried <= 0) return result(s, false);
   return result(
@@ -161,7 +171,8 @@ export function decideTransportLoad(
   crate: number,
   cargo: number,
   capacity: number,
+  waitingMs=0,
 ): TransportLoadDecision {
-  if (cargo >= capacity || (crate <= 0 && cargo > 0)) return "moving-to-barn";
+  if (cargo >= capacity || (crate <= 0 && cargo > 0) || (waitingMs>=700&&cargo>0)) return "moving-to-barn";
   return crate > 0 ? "loading" : "idle-at-crate";
 }
