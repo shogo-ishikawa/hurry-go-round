@@ -15,6 +15,7 @@ import {
 import type { GameState } from "../state/GameState";
 import { GAME_EVENTS } from "../state/GameState";
 import { routeIntakeResourceOne } from "../logic/collectionNetwork";
+import { DEFAULT_PROCESSING_PLANS, type RecipePlan } from "../logic/processingPlan";
 import { ProcessingFacilityView } from "./ProcessingFacilityView";
 import { ProcessingWorkerSystem } from "./ProcessingWorkerSystem";
 import { hireProcessingWorker, moveProcessingOutputToBarn, refillOneProcessingCycleFromBarn, trainProcessingWorker, type ProcessingWorkerRole } from "../logic/processingWorkers";
@@ -47,6 +48,7 @@ export class ProcessingSystem {
   private transferCooldown = 0;
   private activeTransferInteraction: InteractionId | null = null;
   private panelInRange = false;
+  private plans:Record<MachineId,RecipePlan>={"grain-mill":structuredClone(DEFAULT_PROCESSING_PLANS["grain-mill"]),bakery:structuredClone(DEFAULT_PROCESSING_PLANS.bakery)};
   private inputCursor: Record<MachineId, number> = {
     "grain-mill": 0,
     bakery: 0,
@@ -122,14 +124,8 @@ export class ProcessingSystem {
 
     let mill = advanceProductionCycle(state.processing.mill, delta).machine;
     let bakery = advanceProductionCycle(state.processing.bakery, delta).machine;
-    mill = startProductionCycle(mill, "grain-mill", [
-      "mill-flour",
-      "mill-cornmeal",
-    ]).machine;
-    bakery = startProductionCycle(bakery, "bakery", [
-      "bakery-bread",
-      "bakery-cornbread",
-    ]).machine;
+    mill = startProductionCycle(mill, "grain-mill", (["mill-flour","mill-cornmeal"] as RecipeId[]).filter(id=>(this.plans["grain-mill"].targetCyclesByRecipe[id]??0)>0)).machine;
+    bakery = startProductionCycle(bakery, "bakery", (["bakery-bread","bakery-cornbread"] as RecipeId[]).filter(id=>(this.plans.bakery.targetCyclesByRecipe[id]??0)>0)).machine;
 
     state = {
       ...state,
@@ -372,26 +368,26 @@ export class ProcessingSystem {
   }
 
   private updatePanel(): void {
-    const visible =
-      this.getState().processing.land.yardUnlocked &&
-      this.inside("open-processing-panel");
+    const state=this.getState();const direct=state.processing.mill.built&&this.inside("open-mill-plan")?2:state.processing.bakery.built&&this.inside("open-bakery-plan")?3:null;
+    const visible = state.processing.land.yardUnlocked && (this.inside("open-processing-panel")||direct!==null);
     if (visible !== this.panelInRange) {
       this.panelInRange = visible;
       this.scene.game.events.emit(GAME_EVENTS.processingRange, visible);
     }
     if (visible && Phaser.Input.Keyboard.JustDown(this.actionKey)) {
       this.scene.game.events.emit(GAME_EVENTS.state, this.getState());
-      this.scene.game.events.emit(GAME_EVENTS.processingOpen);
+      this.scene.game.events.emit(GAME_EVENTS.processingOpen,direct??0);
     }
   }
 
-  private handlePanelAction = (machine: MachineId|ProcessingWorkerRole, mode: "auto" | "stop" | RecipeId|"hire"|"train"|"refill"|"collect"): void => {
+  private handlePanelAction = (machine: MachineId|ProcessingWorkerRole, mode: "auto" | "stop" | RecipeId|"hire"|"train"|"refill"|"collect"|"plan", recipeId?:RecipeId, cycles?:number): void => {
     const state = this.getState();
     if(machine==="millOperator"||machine==="baker"){
       const worker=state.processing[machine],result=mode==="hire"?hireProcessingWorker(machine,worker,state.economy.walletCoins):trainProcessingWorker(machine,worker,state.economy.walletCoins);
       if(result.ok)this.setState({...state,economy:{...state.economy,walletCoins:result.walletCoins},processing:{...state.processing,[machine]:result.worker}});
       if(result.ok)this.publish(true);this.scene.game.events.emit(GAME_EVENTS.processingResult,{changed:result.ok,message:result.ok?"スタッフの手続きが完了しました":"条件またはコインが足りません",prioritySaveRequested:result.ok});return;
     }
+    if(mode==="plan"&&recipeId&&cycles!==undefined){this.plans[machine as MachineId]={targetCyclesByRecipe:{...this.plans[machine as MachineId].targetCyclesByRecipe,[recipeId]:cycles}};return;}
     const key = machine === "grain-mill" ? "mill" : "bakery";
     const current = state.processing[key];
     if(mode==="refill"||mode==="collect"){
