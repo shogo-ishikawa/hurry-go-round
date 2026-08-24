@@ -2,12 +2,12 @@ import Phaser from "phaser";
 import { GAME_CONFIG } from "../config/gameConfig";
 import { Customer } from "../entities/Customer";
 import { MarketStall } from "../entities/MarketStall";
-import { collectTillCoin } from "../logic/economy";
+import { collectAllTillCoins } from "../logic/economy";
 import { getUnlockedCustomerResources, restockMarketResourceOne, sellRequestedResource } from "../logic/multiResourceMarket";
 import { RESOURCE_IDS, type ResourceId } from "../config/resourceDefinitions";
 import { canFrontBuy, canSpawn } from "../logic/customerQueue";
 import type { Farmer } from "../entities/Farmer";
-import type { GameState } from "../state/GameState";
+import { GAME_EVENTS, type GameState } from "../state/GameState";
 import { palette } from "../art/palette";
 import { UI_TEXT } from "../config/localization";
 import { hasCustomerPatienceExpired, resetStockoutWait, startOrAdvanceStockoutWait } from "../logic/customerPatience";
@@ -20,7 +20,7 @@ export class MarketSystem {
   private spawnTimer = 1200;
   private restockTimer = 0;
   private purchaseTimer = 0;
-  private cashTimer = 0;
+  private cashArmed = true;
   private restockIndex = 0;
   private readonly entrance = new Phaser.Math.Vector2(1960, 900);
   private readonly exit = new Phaser.Math.Vector2(1980, 600);
@@ -187,7 +187,7 @@ export class MarketSystem {
     this.transferDot(customer.x, customer.y - 55, till.x, till.y, palette.coin);
     this.tutorial(5);
   }
-  private updateCash(delta: number): void {
+  private updateCash(_delta: number): void {
     const s = this.getState();
     const near =
       Phaser.Math.Distance.Between(
@@ -196,15 +196,13 @@ export class MarketSystem {
         GAME_CONFIG.cash.x,
         GAME_CONFIG.cash.y,
       ) <= GAME_CONFIG.cash.radius;
-    if (!near || s.economy.tillCoins <= 0) {
-      this.cashTimer = 0;
-      return;
-    }
-    this.cashTimer += delta;
-    if (this.cashTimer < GAME_CONFIG.cashPickupIntervalMs) return;
-    this.cashTimer -= GAME_CONFIG.cashPickupIntervalMs;
-    const economy = collectTillCoin(s.economy);
-    this.setState({ ...s, economy, firstCashCollected: true });
+    if (!near) { this.cashArmed=true; return; }
+    if (s.economy.tillCoins <= 0) { this.cashArmed=true; return; }
+    if(!this.cashArmed)return;
+    this.cashArmed=false;
+    const result = collectAllTillCoins(s.economy);
+    if(!result.changed)return;
+    this.setState({ ...s, economy:result.economy, firstCashCollected: true });
     const till = this.stall.tillPoint();
     this.transferDot(
       till.x,
@@ -214,6 +212,9 @@ export class MarketSystem {
       palette.coin,
     );
     this.tutorial(6);
+    this.scene.game.events.emit(GAME_EVENTS.hint,result.message);
+    this.scene.game.events.emit(GAME_EVENTS.wallet);
+    this.scene.game.events.emit(GAME_EVENTS.dirty,"priority");
   }
   private transferDot(
     x: number,
