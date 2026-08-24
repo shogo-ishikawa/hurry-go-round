@@ -4,14 +4,14 @@ import { advanceCrop, harvestCrop, type CropModel } from '../logic/crops';
 
 export class CropNode extends Phaser.GameObjects.Container {
   readonly cropId: string;
-  readonly cluster: "west" | "central";
+  readonly field = "main" as const;
   model: CropModel;
   private art: Phaser.GameObjects.Graphics;
   private swayOffset: number;
 
-  constructor(scene: Phaser.Scene, x: number, y: number, regrowMs: number, index: number, cropId = `wheat-legacy-${index}`, cluster: "west" | "central" = "central") {
+  constructor(scene: Phaser.Scene, x: number, y: number, regrowMs: number, index: number, cropId = `wheat-main-base-${String(index).padStart(2, "0")}`) {
     const art = scene.add.graphics(); super(scene, x, y, [art]); scene.add.existing(this);
-    this.art = art; this.cropId = cropId; this.cluster = cluster; this.model = { state: 'ready', elapsedMs: 0, regrowMs };
+    this.art = art; this.cropId = cropId; this.model = { state: 'ready', elapsedMs: 0, regrowMs };
     this.swayOffset = index * 0.71; this.draw(); this.setDepth(y);
   }
   harvest(): boolean {
