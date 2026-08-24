@@ -1,4 +1,6 @@
 import { emptyResourceAmounts, type ResourceAmounts } from "../config/resourceDefinitions";
+import type { CarriedCargo } from "./resources";
+import { getCarriedTotal } from "./resources";
 
 export type PastureLevel=0|1|2; export type DairyLevel=0|1|2|3; export type DairyRecipe="butter"|"cheese";
 export interface CowState { id:string; producing:boolean; productionRemainingMs:number; readyMilk:number; activitySeed:number }
@@ -28,3 +30,28 @@ export const getDairyOutputBatch=(available:number,capacity:number)=>Math.max(0,
 export type DairyTask="feed-emergency"|"collect-milk"|"feed"|"wait";
 export function selectDairyTask(input:{hired:boolean;hayRack:number;milkTank:number;hayAvailable:number}) :DairyTask {if(!input.hired)return"wait";if(input.hayRack<=5&&input.hayAvailable>0)return"feed-emergency";if(input.milkTank>=5)return"collect-milk";if(input.hayRack<18&&input.hayAvailable>0)return"feed";return"wait"}
 export const emptyDairyCargo=():ResourceAmounts=>emptyResourceAmounts();
+
+export type DairyFacilityId="pasture-purchase"|"pasture-expansion"|"cow-barn"|"cow-purchase"|"hay-rack"|"milk-tank"|"workshop-build"|"workshop-input"|"workshop-output"|"dairy-board";
+export interface DairyFacilityDefinition {id:DairyFacilityId;publicName:string;center:{x:number;y:number};radius:number;visibleRadius:number;capacity?:number;acceptedResources?:readonly (keyof ResourceAmounts)[];producedResources?:readonly (keyof ResourceAmounts)[]}
+export const DAIRY_FACILITIES:Readonly<Record<DairyFacilityId,DairyFacilityDefinition>>={
+ "pasture-purchase":{id:"pasture-purchase",publicName:"牧草地購入地点",center:{x:3110,y:550},radius:100,visibleRadius:120},
+ "pasture-expansion":{id:"pasture-expansion",publicName:"牧草地拡張地点",center:{x:3120,y:950},radius:100,visibleRadius:120},
+ "cow-barn":{id:"cow-barn",publicName:"牛舎建設地点",center:{x:3350,y:1120},radius:100,visibleRadius:120},
+ "cow-purchase":{id:"cow-purchase",publicName:"牛購入地点",center:{x:3550,y:1120},radius:100,visibleRadius:120},
+ "hay-rack":{id:"hay-rack",publicName:"干し草台",center:{x:3220,y:1360},radius:105,visibleRadius:125,capacity:24,acceptedResources:["hay"]},
+ "milk-tank":{id:"milk-tank",publicName:"ミルクタンク",center:{x:3520,y:1360},radius:105,visibleRadius:125,capacity:24,producedResources:["milk"]},
+ "workshop-build":{id:"workshop-build",publicName:"乳製品工房建設地点",center:{x:3500,y:1640},radius:100,visibleRadius:120},
+ "workshop-input":{id:"workshop-input",publicName:"工房搬入口",center:{x:3310,y:1800},radius:100,visibleRadius:120,acceptedResources:["milk"]},
+ "workshop-output":{id:"workshop-output",publicName:"工房受取口",center:{x:3820,y:1800},radius:100,visibleRadius:120,producedResources:["butter","cheese"]},
+ "dairy-board":{id:"dairy-board",publicName:"酪農管理板",center:{x:3650,y:1510},radius:120,visibleRadius:145},
+};
+export interface DairyTransferResult<T>{changed:boolean;value:T;moved:number;fromBefore:number;fromAfter:number;toBefore:number;toAfter:number;reason?:"empty"|"full"|"target-reached"}
+export function fillHayRackFromBarn(barn:ResourceAmounts,hayRack:number,target=18,capacity=24):DairyTransferResult<{barn:ResourceAmounts;hayRack:number}>{const to=Math.min(Math.max(0,target),capacity),moved=Math.min(Math.max(0,Math.floor(barn.hay)),Math.max(0,to-hayRack));return{changed:moved>0,value:{barn:{...barn,hay:barn.hay-moved},hayRack:hayRack+moved},moved,fromBefore:barn.hay,fromAfter:barn.hay-moved,toBefore:hayRack,toAfter:hayRack+moved,...(!moved?{reason:barn.hay<=0?"empty" as const:hayRack>=to?"target-reached" as const:"full" as const}:{})}}
+export function depositHayBatchFromCargo(cargo:CarriedCargo,hayRack:number,capacity=24):DairyTransferResult<{cargo:CarriedCargo;hayRack:number}>{const moved=Math.min(Math.max(0,cargo.amounts.hay),Math.max(0,capacity-hayRack));const amounts={...cargo.amounts,hay:cargo.amounts.hay-moved};return{changed:moved>0,value:{cargo:{...cargo,amounts},hayRack:hayRack+moved},moved,fromBefore:cargo.amounts.hay,fromAfter:amounts.hay,toBefore:hayRack,toAfter:hayRack+moved,...(!moved?{reason:cargo.amounts.hay<=0?"empty" as const:"full" as const}:{})}}
+export function collectMilkBatchToCargo(milkTank:number,cargo:CarriedCargo):DairyTransferResult<{milkTank:number;cargo:CarriedCargo}>{const room=Math.max(0,cargo.capacity-getCarriedTotal(cargo)),moved=Math.min(Math.max(0,milkTank),room);const amounts={...cargo.amounts,milk:cargo.amounts.milk+moved};return{changed:moved>0,value:{milkTank:milkTank-moved,cargo:{...cargo,amounts}},moved,fromBefore:milkTank,fromAfter:milkTank-moved,toBefore:cargo.amounts.milk,toAfter:amounts.milk,...(!moved?{reason:milkTank<=0?"empty" as const:"full" as const}:{})}}
+export function moveMilkTankToBarn(milkTank:number,barn:ResourceAmounts):DairyTransferResult<{milkTank:number;barn:ResourceAmounts}>{const moved=Math.max(0,Math.floor(milkTank));return{changed:moved>0,value:{milkTank:milkTank-moved,barn:{...barn,milk:barn.milk+moved}},moved,fromBefore:milkTank,fromAfter:milkTank-moved,toBefore:barn.milk,toAfter:barn.milk+moved,...(!moved?{reason:"empty" as const}:{})}}
+export const getDairyWorkerCapacity=(level:number)=>[0,8,12,16][level]??0;
+export type DairyWorkerRole="dairyWorker"|"workshopWorker";
+export function hireDairyWorker(role:DairyWorkerRole,worker:DairyState[DairyWorkerRole],wallet:number){const cost=role==="dairyWorker"?650:750;if(worker.hired)return{changed:false,worker,wallet,reason:"duplicate"};if(wallet<cost)return{changed:false,worker,wallet,reason:"coins"};return{changed:true,worker:{...worker,hired:true,level:1 as const},wallet:wallet-cost}}
+export function trainDairyWorker(role:DairyWorkerRole,worker:DairyState[DairyWorkerRole],wallet:number){if(!worker.hired||worker.level===0)return{changed:false,worker,wallet,reason:"not-hired"};if(worker.level===3)return{changed:false,worker,wallet,reason:"maximum"};const costs=role==="dairyWorker"?[0,280,620]:[0,360,760],cost=costs[worker.level]!;if(wallet<cost)return{changed:false,worker,wallet,reason:"coins"};return{changed:true,worker:{...worker,level:(worker.level+1) as 2|3},wallet:wallet-cost}}
+export function getCowBarnStatus(d:DairyState){const active=d.cows.filter(c=>c.producing).length,waiting=d.cows.filter(c=>!c.producing&&c.readyMilk===0).length,held=d.cows.reduce((n,c)=>n+c.readyMilk,0),times=d.cows.filter(c=>c.producing).map(c=>c.productionRemainingMs);return{active,waiting,held,nextMilkMs:times.length?Math.min(...times):null};}

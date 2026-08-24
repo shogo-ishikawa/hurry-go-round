@@ -1,0 +1,5 @@
+import {describe,expect,it} from "vitest";
+import {emptyResourceAmounts} from "../config/resourceDefinitions";
+import {createMachine} from "./processing";
+import {moveProcessingOutputToBarn,refillOneProcessingCycleFromBarn} from "./processingWorkers";
+describe("processing warehouse supply",()=>{it("refills exactly the selected recipe and no unrelated ingredient",()=>{const machine={...createMachine("bakery"),built:true,level:1 as const,selectedMode:"bakery-cornbread" as const};const barn={...emptyResourceAmounts(),flour:4,cornmeal:3,egg:2,wheat:9};const r=refillOneProcessingCycleFromBarn("bakery",machine,barn);expect(r.breakdown).toEqual({flour:1,cornmeal:1,egg:1});expect(r.barn.wheat).toBe(9);expect(r.totalMoved).toBe(3);});it("moves every completed output in one transaction",()=>{const machine=createMachine("grain-mill");machine.output.amounts.flour=4;machine.output.amounts.cornmeal=2;const r=moveProcessingOutputToBarn(machine,emptyResourceAmounts());expect(r).toMatchObject({changed:true,totalMoved:6,barn:{flour:4,cornmeal:2},machine:{output:{amounts:{flour:0,cornmeal:0}}}});});});
