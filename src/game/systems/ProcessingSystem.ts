@@ -17,6 +17,7 @@ import { GAME_EVENTS } from "../state/GameState";
 import { routeIntakeResourceOne } from "../logic/collectionNetwork";
 import { ProcessingFacilityView } from "./ProcessingFacilityView";
 import { ProcessingWorkerSystem } from "./ProcessingWorkerSystem";
+import { hireProcessingWorker, moveProcessingOutputToBarn, refillOneProcessingCycleFromBarn, trainProcessingWorker, type ProcessingWorkerRole } from "../logic/processingWorkers";
 
 type TransferDirection = "input" | "output";
 type TransferStationId =
@@ -384,13 +385,20 @@ export class ProcessingSystem {
     }
   }
 
-  private handlePanelAction = (
-    machine: MachineId,
-    mode: "auto" | "stop" | RecipeId,
-  ): void => {
+  private handlePanelAction = (machine: MachineId|ProcessingWorkerRole, mode: "auto" | "stop" | RecipeId|"hire"|"train"|"refill"|"collect"): void => {
     const state = this.getState();
+    if(machine==="millOperator"||machine==="baker"){
+      const worker=state.processing[machine],result=mode==="hire"?hireProcessingWorker(machine,worker,state.economy.walletCoins):trainProcessingWorker(machine,worker,state.economy.walletCoins);
+      if(result.ok)this.setState({...state,economy:{...state.economy,walletCoins:result.walletCoins},processing:{...state.processing,[machine]:result.worker}});
+      if(result.ok)this.publish(true);this.scene.game.events.emit(GAME_EVENTS.processingResult,{changed:result.ok,message:result.ok?"スタッフの手続きが完了しました":"条件またはコインが足りません",prioritySaveRequested:result.ok});return;
+    }
     const key = machine === "grain-mill" ? "mill" : "bakery";
     const current = state.processing[key];
+    if(mode==="refill"||mode==="collect"){
+      const result=mode==="refill"?refillOneProcessingCycleFromBarn(machine,current,state.barn):moveProcessingOutputToBarn(current,state.barn);
+      if(result.changed)this.setState({...state,barn:result.barn,processing:{...state.processing,[key]:result.machine}});
+      if(result.changed)this.publish(true);this.scene.game.events.emit(GAME_EVENTS.processingResult,{changed:result.changed,message:result.changed?`${result.totalMoved}個をまとめて移動しました`:"移動できる商品がありません",prioritySaveRequested:result.changed});return;
+    }
     this.setState({
       ...state,
       processing: {

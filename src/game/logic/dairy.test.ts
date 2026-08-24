@@ -1,5 +1,5 @@
 import {describe,expect,it} from "vitest";
-import {advanceCows,advanceDairyCycle,advancePastureNodes,harvestPastureNode,buildCowBarn,buyCow,cancelDairyCycle,createDairyState,expandPasture,getDairyInputBatch,getPasturePlots,purchasePasture,selectDairyTask,startDairyCycle} from "./dairy";
+import {advanceCows,advanceDairyCycle,advancePastureNodes,harvestPastureNode,buildCowBarn,buyCow,cancelDairyCycle,createDairyState,expandPasture,getDairyInputBatch,getPasturePlots,purchasePasture,selectDairyTask,startDairyCycle,fillHayRackFromBarn,depositHayBatchFromCargo,moveMilkTankToBarn,hireDairyWorker,trainDairyWorker,getDairyWorkerCapacity} from "./dairy";
 import type {DairyState} from "./dairy";
 import {emptyResourceAmounts} from "../config/resourceDefinitions";
 describe("v0.9.3 pasture and dairy",()=>{
@@ -8,4 +8,9 @@ describe("v0.9.3 pasture and dairy",()=>{
  it("reserves milk, completes recipes, and safely cancels",()=>{let s:DairyState={...createDairyState(),workshopBuilt:true,workshopLevel:1 as const,workshopInput:3,workshopMode:"cheese" as const};s=startDairyCycle(s);expect(s.cycle?.reservedMilk).toBe(3);expect(advanceDairyCycle(s,10000).workshopOutput.cheese).toBe(1);const cancelled=cancelDairyCycle(s,{...emptyResourceAmounts(),milk:4});expect(cancelled.s.workshopInput+cancelled.barn.milk).toBe(7);expect(getDairyInputBatch(7,0,1,"cheese",8)).toBe(6)});
  it("prioritizes emergency feed",()=>expect(selectDairyTask({hired:true,hayRack:5,milkTank:24,hayAvailable:2})).toBe("feed-emergency"));
  it("regrows staggered pasture nodes and preserves ready milk while the tank is full",()=>{const nodes=createDairyState().pastureNodes;const cut=harvestPastureNode(nodes,nodes[0]!.id,true);expect(cut.harvested).toBe(true);expect(advancePastureNodes(cut.nodes,8000)[0]!.state).toBe("ready");const cow={id:"cow-1",producing:true,productionRemainingMs:1,readyMilk:0,activitySeed:1};const full=advanceCows([cow],0,24,1);expect(full.cows[0]!.readyMilk).toBe(1);expect(full.milkTank).toBe(24);expect(advanceCows(full.cows,0,23,1)).toMatchObject({milkTank:24,cows:[{readyMilk:0}]});});
+});
+
+describe("v0.9.8 dairy batch supply",()=>{
+ it("moves hay and milk atomically without changing other resources",()=>{const barn={...emptyResourceAmounts(),hay:12,wheat:7,milk:3};const filled=fillHayRackFromBarn(barn,3);expect(filled).toMatchObject({changed:true,moved:12,value:{hayRack:15,barn:{hay:0,wheat:7}}});const cargo={capacity:12,amounts:{...emptyResourceAmounts(),hay:9,wheat:2}};const deposited=depositHayBatchFromCargo(cargo,20);expect(deposited).toMatchObject({moved:4,value:{hayRack:24,cargo:{amounts:{hay:5,wheat:2}}}});const stored=moveMilkTankToBarn(8,barn);expect(stored.value).toMatchObject({milkTank:0,barn:{milk:11,wheat:7}});});
+ it("uses authoritative staff costs and capacities",()=>{const state=createDairyState();const hired=hireDairyWorker("dairyWorker",state.dairyWorker,1000);expect(hired).toMatchObject({changed:true,wallet:350,worker:{level:1}});expect(getDairyWorkerCapacity(1)).toBe(8);expect(trainDairyWorker("dairyWorker",hired.worker,1000)).toMatchObject({wallet:720,worker:{level:2}});});
 });
