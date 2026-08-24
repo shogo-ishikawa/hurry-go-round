@@ -62,7 +62,7 @@ export class UIScene extends Phaser.Scene {
     this.marketText = this.add.text(0, 0, "売り場\n麦 0 / 8", style);
     this.tillText = this.add.text(0, 0, "売上  0", style);
     this.walletText = this.add.text(0, 0, "コイン  0", style);
-    this.versionText = this.add.text(0, 0, "v0.9.6", {
+    this.versionText = this.add.text(0, 0, "v0.9.7", {
       ...style,
       fontSize: "14px",
       color: "#755c49",

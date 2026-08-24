@@ -14,8 +14,7 @@ import {
   loadTransportWorkerOne,
   unloadTransportWorkerOne,
   type AutomationState,
-  selectNextWheatNodeInCluster,
-  selectWheatFieldCluster,
+  selectNearestReadyWheatNode,
 } from "../logic/workers";
 import { addCargoOne } from "../logic/resources";
 import { palette } from "../art/palette";
@@ -51,8 +50,7 @@ export class WorkerSystem {
   private unloadTimer = 0;
   private routeIndex = 0;
   private crateFullNotified = false;
-  private activeCluster?: "west" | "central";
-  private clusterEmptyElapsed = 0;
+  private fieldEmptyElapsed = 0;
   private needsFieldEntry = true;
   private lastDepositedBatchSize = 0;
   private completedDepositCount = 0;
@@ -161,63 +159,26 @@ export class WorkerSystem {
         s.workers.harvestWorker.level,
       );
     this.retarget = Math.max(0, this.retarget - delta);
-    if (
-      this.harvestPhase === "seeking-crop" ||
-      this.harvestPhase === "waiting-for-crops"
-    ) {
-      if (
-        s.workers.harvestWorker.carried >=
-        params.capacity
-      ) {
+    if (this.harvestPhase === "seeking-crop" || this.harvestPhase === "waiting-for-crops") {
+      if (s.workers.harvestWorker.carried >= params.capacity) {
         this.setHarvestPhase("returning-to-crate");
         return;
       }
-      const nextInActiveCluster = this.activeCluster
-        ? this.nextInCluster(this.activeCluster, w.x, w.y)
-        : undefined;
-      if (this.activeCluster && s.workers.harvestWorker.carried > 0) {
-        if (nextInActiveCluster) {
-          this.clusterEmptyElapsed = 0;
-          this.target = nextInActiveCluster;
-          this.setHarvestPhase("moving-to-crop");
-          return;
-        }
-        this.clusterEmptyElapsed += delta;
-        if (this.clusterEmptyElapsed < 600) return;
-        this.clusterEmptyElapsed = 0;
-        this.needsFieldEntry = true;
-        this.setHarvestPhase("returning-to-crate");
-        return;
-      }
-      this.clusterEmptyElapsed = 0;
       if (this.retarget > 0) return;
       this.retarget = params.retargetIntervalMs;
-      const selectedCluster = selectWheatFieldCluster(
-        this.clusterNodes(),
-        w.x,
-        w.y,
-        this.activeCluster,
-      ) ?? undefined;
-      if (selectedCluster !== this.activeCluster) this.needsFieldEntry = true;
-      this.activeCluster = selectedCluster;
-      this.target = this.activeCluster
-        ? this.nextInCluster(this.activeCluster, w.x, w.y)
-        : undefined;
+      this.target = this.nextReady(w.x, w.y);
       if (!this.target) {
-        this.setHarvestPhase(
-          s.workers.harvestWorker.carried > 0
-            ? "returning-to-crate"
-            : "waiting-for-crops",
-        );
+        if (s.workers.harvestWorker.carried > 0) {
+          this.fieldEmptyElapsed += delta;
+          if (this.fieldEmptyElapsed >= 600) this.setHarvestPhase("returning-to-crate");
+        } else this.setHarvestPhase("waiting-for-crops");
         return;
       }
-      this.setHarvestPhase(
-        this.needsFieldEntry ? "moving-to-field" : "moving-to-crop",
-      );
+      this.fieldEmptyElapsed = 0;
+      this.setHarvestPhase(this.needsFieldEntry ? "moving-to-field" : "moving-to-crop");
     }
     if (this.harvestPhase === "moving-to-field") {
-      const entry =
-        this.target?.cluster === "west" ? WORKER_ROUTES.fieldEntries[0] : WORKER_ROUTES.fieldEntries[1];
+      const entry = WORKER_ROUTES.fieldEntry;
       if (
         entry &&
         w.moveToward(entry, delta, params.moveSpeed)
@@ -262,14 +223,12 @@ export class WorkerSystem {
           this.setHarvestPhase("returning-to-crate");
           return;
         }
-        const next = this.activeCluster
-          ? this.nextInCluster(this.activeCluster, w.x, w.y)
-          : undefined;
+        const next = this.nextReady(w.x, w.y);
         if (next) {
           this.target = next;
           this.setHarvestPhase("moving-to-crop");
         } else {
-          this.clusterEmptyElapsed = 0;
+          this.fieldEmptyElapsed = 0;
           this.setHarvestPhase("seeking-crop");
         }
       }
@@ -411,23 +370,9 @@ export class WorkerSystem {
       }
     }
   }
-  private clusterNodes() {
-    return this.crops.map((crop) => ({
-      id: crop.cropId,
-      cluster: crop.cluster,
-      x: crop.x,
-      y: crop.y,
-      ready: crop.model.state === "ready",
-    }));
-  }
-  private nextInCluster(
-    cluster: "west" | "central",
-    x: number,
-    y: number,
-  ): CropNode | undefined {
-    const node = selectNextWheatNodeInCluster(
-      this.clusterNodes(),
-      cluster,
+  private nextReady(x: number, y: number): CropNode | undefined {
+    const node = selectNearestReadyWheatNode(
+      this.crops.map((crop) => ({ id: crop.cropId, x: crop.x, y: crop.y, ready: crop.model.state === "ready" })),
       x,
       y,
     );
@@ -438,12 +383,11 @@ export class WorkerSystem {
     this.harvester = undefined;
     this.harvestPhase = "idle";
     this.target = undefined;
-    this.activeCluster = undefined;
     this.needsFieldEntry = true;
     this.timer = 0;
     this.retarget = 0;
     this.depositTimer = 0;
-    this.clusterEmptyElapsed = 0;
+    this.fieldEmptyElapsed = 0;
     this.crateFullNotified = false;
     this.lastDepositedBatchSize = 0;
     this.completedDepositCount = 0;
@@ -453,7 +397,7 @@ export class WorkerSystem {
   getWheatDiagnostics() {
     return {
       workerPhase: this.harvestPhase,
-      activeCluster: this.activeCluster ?? null,
+      fieldEntryCount: 1,
       workerX: this.harvester?.x ?? null,
       workerY: this.harvester?.y ?? null,
       lastDepositedBatchSize: this.lastDepositedBatchSize,
