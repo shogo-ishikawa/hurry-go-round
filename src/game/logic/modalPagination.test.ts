@@ -1,0 +1,2 @@
+import {describe,expect,it} from "vitest";import {calculatePagination} from "./modalPagination";
+describe("responsive modal pagination",()=>{it.each([[120,1],[220,3],[350,5],[500,7]])("uses deterministic page sizes at %ipx",(height,size)=>expect(calculatePagination(11,0,height).pageSize).toBe(size));it("clamps pages and exposes navigation",()=>expect(calculatePagination(11,99,220)).toMatchObject({page:3,pageCount:4,start:9,end:11,canPrevious:true,canNext:false}));});
