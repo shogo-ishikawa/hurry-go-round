@@ -86,6 +86,31 @@ export function deliverNextContractResourceOne(state: ContractState, cargo:Carri
   for(let i=0;i<RESOURCE_KEYS.length;i++){const key=RESOURCE_KEYS[(start+i)%RESOURCE_KEYS.length]!;if(state.active.delivered[key]>=state.active.requirements[key])continue;const source=cargo.amounts[key]>0?"cargo":barn[key]>0?"barn":null;if(!source)continue;const active={...state.active,delivered:{...state.active.delivered,[key]:state.active.delivered[key]+1}};const name=RESOURCE_DEFINITIONS[key].publicName;return{state:{...state,active,deliveryCursor:key},cargo:source==="cargo"?{...cargo,amounts:{...cargo.amounts,[key]:cargo.amounts[key]-1}}:cargo,barn:source==="barn"?{...barn,[key]:barn[key]-1}:barn,resource:key,source,...result("deliver",true,`${name}を${source==="cargo"?"持ち物":"倉庫"}から1個出荷しました`)}};
   const missing=RESOURCE_KEYS.filter(key=>state.active!.requirements[key]>state.active!.delivered[key]).map(key=>`${RESOURCE_DEFINITIONS[key].publicName} ${state.active!.requirements[key]-state.active!.delivered[key]}`).join("、");return{state,cargo,barn,resource:null,source:null as null,...result("deliver",false,`出荷できる商品がありません\n不足：${missing}`,"no-deliverable-stock")};
 }
+export interface ContractBatchDeliveryBreakdown { resource:ResourceId; fromCargo:number; fromBarn:number; deliveredThisBatch:number; deliveredTotal:number; requirement:number; remaining:number }
+export interface ContractBatchDeliveryResult { changed:boolean; state:ContractState; cargo:CarriedCargo; barn:ResourceAmounts; breakdown:ContractBatchDeliveryBreakdown[]; totalDelivered:number; complete:boolean; message:string; reason?:"no-active-contract"|"no-deliverable-stock"|"already-complete" }
+export function deliverContractBatch(state:ContractState,cargo:CarriedCargo,barn:ResourceAmounts):ContractBatchDeliveryResult {
+  const active=state.active;
+  if(!active)return{changed:false,state,cargo,barn,breakdown:[],totalDelivered:0,complete:false,message:"進行中の契約はありません",reason:"no-active-contract"};
+  if(isContractComplete(active))return{changed:false,state,cargo,barn,breakdown:[],totalDelivered:0,complete:true,message:"契約はすでに納品済みです",reason:"already-complete"};
+  const nextCargo={...cargo,amounts:{...cargo.amounts}},nextBarn={...barn},delivered={...active.delivered};
+  const breakdown:ContractBatchDeliveryBreakdown[]=[];
+  for(const resource of RESOURCE_KEYS){
+    const requirement=active.requirements[resource],unmet=Math.max(0,requirement-delivered[resource]);
+    if(unmet===0)continue;
+    const fromCargo=Math.min(unmet,nextCargo.amounts[resource]);
+    const fromBarn=Math.min(unmet-fromCargo,nextBarn[resource]);
+    const deliveredThisBatch=fromCargo+fromBarn;
+    nextCargo.amounts[resource]-=fromCargo;nextBarn[resource]-=fromBarn;delivered[resource]+=deliveredThisBatch;
+    breakdown.push({resource,fromCargo,fromBarn,deliveredThisBatch,deliveredTotal:delivered[resource],requirement,remaining:requirement-delivered[resource]});
+  }
+  const totalDelivered=breakdown.reduce((sum,item)=>sum+item.deliveredThisBatch,0);
+  if(totalDelivered===0){const missing=breakdown.map(item=>`${RESOURCE_DEFINITIONS[item.resource].publicName} ${item.remaining}`).join("、");return{changed:false,state,cargo,barn,breakdown,totalDelivered:0,complete:false,message:`納品できる商品がありません\n在庫台帳で持ち物と倉庫を確認してください\n不足：${missing}`,reason:"no-deliverable-stock"};}
+  const nextState={...state,active:{...active,delivered},deliveryCursor:null};
+  const complete=isContractComplete(nextState.active);
+  const cargoCount=breakdown.reduce((sum,item)=>sum+item.fromCargo,0),barnCount=breakdown.reduce((sum,item)=>sum+item.fromBarn,0);
+  const remaining=breakdown.filter(item=>item.remaining>0).map(item=>`${RESOURCE_DEFINITIONS[item.resource].publicName} ${item.remaining}`).join("、");
+  return{changed:true,state:nextState,cargo:nextCargo,barn:nextBarn,breakdown,totalDelivered,complete,message:`一括納品しました：合計 ${totalDelivered}個\n持ち物から ${cargoCount}個\n倉庫から ${barnCount}個${remaining?`\n残り：${remaining}`:""}`};
+}
 export function isContractComplete(contract: DeliveryContract): boolean { return RESOURCE_KEYS.every(k => contract.delivered[k] >= contract.requirements[k]); }
 export function advanceContractActiveTime(state: ContractState, delta: number, paused: boolean): ContractState { const normalized={...state,declineCooldownMs:0};return !normalized.active || paused ? normalized : { ...normalized, active: { ...normalized.active, elapsedActiveMs: normalized.active.elapsedActiveMs + Math.max(0, delta) } }; }
 export function cancelActiveContract(state: ContractState, barn: ResourceAmounts) { if (!state.active) return { ok:false,state,barn,returned:emptyResourceAmounts(),...result("cancel",false,"進行中の契約がありません","no-active-contract") }; const returned={...barn},quantities=emptyResourceAmounts();for(const key of RESOURCE_KEYS){quantities[key]=state.active.delivered[key];returned[key]+=quantities[key]}const detail=RESOURCE_KEYS.filter(key=>quantities[key]>0).map(key=>`${RESOURCE_DEFINITIONS[key].publicName} ${quantities[key]}個`).join("、")||"なし";return {ok:true,state:{...state,active:null,deliveryCursor:null,statistics:{...state.statistics,contractsCancelled:state.statistics.contractsCancelled+1}},barn:returned,returned:quantities,...result("cancel",true,`契約を中止しました。倉庫へ返却：${detail}`)}; }

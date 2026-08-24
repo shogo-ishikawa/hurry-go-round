@@ -27,8 +27,8 @@ import { HiringSystem } from "../systems/HiringSystem";
 import { ExpansionSystem } from "../systems/ExpansionSystem";
 import { UIScene } from "./UIScene";
 import { ExpandedAutomationSystem } from "../systems/ExpandedAutomationSystem";
-import { acceptContract, advanceContractActiveTime, cancelActiveContract, completeContract, declineContractOffer, deliverNextContractResourceOne, isContractComplete } from "../logic/contracts";
-import type { ResourceId } from "../config/resourceDefinitions";
+import { acceptContract, advanceContractActiveTime, cancelActiveContract, completeContract, declineContractOffer, deliverContractBatch } from "../logic/contracts";
+import { emptyResourceAmounts, type ResourceId } from "../config/resourceDefinitions";
 import { palette } from "../art/palette";
 import type { PersistedGameSnapshot } from "../persistence/saveSchema";
 import { createPersistedSnapshot } from "../logic/saveSnapshot";
@@ -66,7 +66,7 @@ export class GameScene extends Phaser.Scene {
   private dragDirection: Point = { x: 0, y: 0 };
   private dragging = false;
   private destinationMarker!: Phaser.GameObjects.Arc;
-  private contractCooldown = 0;
+  private contractDockArmed = true;
   private contractInRange = false;
   private contractDirtyElapsed = 0;
   private contractKey!: Phaser.Input.Keyboard.Key;
@@ -186,6 +186,11 @@ export class GameScene extends Phaser.Scene {
   getCollectionPanelE2ESummary(){return(this.scene.get("ui") as UIScene).getCollectionE2ESummary();}
   configureInventoryE2E(input:{cargo?:Partial<GameState["cargo"]["amounts"]>;cargoCapacity?:number;barn?:Partial<GameState["barn"]>;market?:Partial<GameState["market"]>;marketCapacity?:Partial<GameState["marketCapacity"]>;tillCoins?:number;walletCoins?:number}):void{const cargo={...this.state.cargo,capacity:input.cargoCapacity??this.state.cargo.capacity,amounts:{...this.state.cargo.amounts,...input.cargo}};this.state={...this.state,cargo,barn:{...this.state.barn,...input.barn},market:{...this.state.market,...input.market},marketCapacity:{...this.state.marketCapacity,...input.marketCapacity},economy:{...this.state.economy,tillCoins:input.tillCoins??this.state.economy.tillCoins,walletCoins:input.walletCoins??this.state.economy.walletCoins}};this.farmer.setCargo(cargo.amounts,cargo.capacity);this.emitState();}
   getInventoryE2ESummary(){return{...(this.scene.get("ui") as UIScene).getInventoryE2ESummary(),cargoArt:this.farmer.getCargoArtCategories()};}
+  configureContractBatchE2E(requirements:Partial<GameState["barn"]>,cargo:Partial<GameState["barn"]>,barn:Partial<GameState["barn"]>):void{const offer=this.state.contracts.offers[0]!;const accepted=acceptContract(this.state.contracts,offer.id,this.unlockedResources());const exact=emptyResourceAmounts();for(const key of Object.keys(exact) as ResourceId[])exact[key]=Math.max(0,Math.floor(requirements[key]??0));this.state={...this.state,contracts:{...accepted.state,active:{...accepted.state.active!,requirements:exact,delivered:{...accepted.state.active!.delivered}}},cargo:{...this.state.cargo,capacity:999,amounts:{...this.state.cargo.amounts,...cargo}},barn:{...this.state.barn,...barn}};this.farmer.setCargo(this.state.cargo.amounts,this.state.cargo.capacity);this.contractDockArmed=true;this.emitState();}
+  positionAtContractDockE2E():void{this.farmer.setPosition(GAME_CONFIG.contractDock.x,GAME_CONFIG.contractDock.y);this.updateContracts(0);}
+  positionOutsideContractDockE2E():void{this.farmer.setPosition(GAME_CONFIG.contractBoard.x,GAME_CONFIG.contractBoard.y);this.updateContracts(0);}
+  positionAtCashE2E():void{this.farmer.setPosition(GAME_CONFIG.cash.x,GAME_CONFIG.cash.y);this.market.update(0);}
+  getLogisticsE2ESummary(){return{cargo:{...this.state.cargo.amounts},barn:{...this.state.barn},market:{...this.state.market},contracts:structuredClone(this.state.contracts),wallet:this.state.economy.walletCoins,till:this.state.economy.tillCoins};}
   getProcessingPanelE2ESummary(){return (this.scene.get("ui") as UIScene).getProcessingPanelE2ESummary();}
   openContractsE2E():void{(this.scene.get("ui") as UIScene).openContractsE2E();}
   openInventoryE2E():void{(this.scene.get("ui") as UIScene).openInventoryE2E();}
@@ -249,18 +254,21 @@ export class GameScene extends Phaser.Scene {
     board.fillStyle(palette.shadow,.22).fillEllipse(1638,970,180,38).lineStyle(7,palette.outline).fillStyle(palette.soil).fillRoundedRect(1550,850,160,105,8).strokeRoundedRect(1550,850,160,105,8).fillStyle(palette.barn).fillTriangle(1535,855,1725,855,1630,815).fillStyle(palette.cream).fillRoundedRect(1570,870,42,55,3).fillRoundedRect(1620,865,42,62,3).fillRoundedRect(1670,875,25,47,3);
     this.add.text(1630,835,"出荷契約",{fontFamily:"system-ui",fontSize:"20px",fontStyle:"bold",color:"#fff4d8"}).setOrigin(.5).setDepth(2000);
     const dock = this.add.graphics().setDepth(GAME_CONFIG.contractDock.y); dock.fillStyle(palette.shadow,.2).fillEllipse(1378,890,230,55).lineStyle(6,palette.outline).fillStyle(palette.path).fillRoundedRect(1260,780,230,105,10).strokeRoundedRect(1260,780,230,105,10).fillStyle(palette.soil).fillRoundedRect(1290,800,48,45,6).strokeRoundedRect(1290,800,48,45,6).fillRoundedRect(1350,800,48,45,6).strokeRoundedRect(1350,800,48,45,6).fillRoundedRect(1410,800,48,45,6).strokeRoundedRect(1410,800,48,45,6);
-    this.add.text(1375,862,"契約出荷場",{fontFamily:"system-ui",fontSize:"17px",fontStyle:"bold",color:"#49382e",backgroundColor:"#fff4d8dd",padding:{x:8,y:4}}).setOrigin(.5).setDepth(2000);
+    this.add.text(1375,862,"契約商品を一括納品\nE / タップ",{fontFamily:"system-ui",fontSize:"17px",fontStyle:"bold",align:"center",color:"#49382e",backgroundColor:"#fff4d8dd",padding:{x:8,y:4}}).setOrigin(.5).setDepth(2000);
   }
   private unlockedResources(): ResourceId[] { return getUnlockedResourceIds(this.state); }
   private updateContracts(delta: number): void {
-    this.state = { ...this.state, contracts: advanceContractActiveTime(this.state.contracts, delta, false) }; this.contractCooldown = Math.max(0, this.contractCooldown-delta);
+    this.state = { ...this.state, contracts: advanceContractActiveTime(this.state.contracts, delta, false) };
     if(this.state.contracts.active){this.contractDirtyElapsed+=delta;if(this.contractDirtyElapsed>=1000){this.contractDirtyElapsed=0;this.game.events.emit(GAME_EVENTS.dirty);}}
     const range = Phaser.Math.Distance.Between(this.farmer.x,this.farmer.y,GAME_CONFIG.contractBoard.x,GAME_CONFIG.contractBoard.y)<=GAME_CONFIG.contractBoard.radius;
     if (range !== this.contractInRange) { this.contractInRange=range; this.game.events.emit(GAME_EVENTS.contractRange,range); }
     if (range && (Phaser.Input.Keyboard.JustDown(this.contractKey) || Phaser.Input.Keyboard.JustDown(this.cursors.space!))) this.game.events.emit(GAME_EVENTS.contractOpen);
     const dock = Phaser.Math.Distance.Between(this.farmer.x,this.farmer.y,GAME_CONFIG.contractDock.x,GAME_CONFIG.contractDock.y)<=GAME_CONFIG.contractDock.radius;
-    if (dock && this.contractCooldown<=0 && this.state.contracts.active) { const result=deliverNextContractResourceOne(this.state.contracts,this.state.cargo,this.state.barn);this.contractCooldown=GAME_CONFIG.contractDeliveryIntervalMs;this.game.events.emit(GAME_EVENTS.hint,result.message);if(result.changed){ this.state={...this.state,contracts:result.state,cargo:result.cargo,barn:result.barn};this.farmer.setCargo(result.cargo.amounts,result.cargo.capacity);transferEffect(this,this.farmer.x,this.farmer.y,GAME_CONFIG.contractDock.x,GAME_CONFIG.contractDock.y);this.emitState();this.game.events.emit(GAME_EVENTS.dirty);if(this.state.contracts.active&&isContractComplete(this.state.contracts.active)){const done=completeContract(this.state.contracts,this.state.economy.walletCoins);if(done.changed&&"reward" in done){this.state={...this.state,contracts:done.state,economy:{...this.state.economy,walletCoins:done.wallet,contractCoinsEarned:(this.state.economy.contractCoinsEarned??0)+done.reward.total}};this.emitState();this.game.events.emit(GAME_EVENTS.dirty,"priority");this.game.events.emit(GAME_EVENTS.contractOpen,done.reward);}} } }
+    if(!dock){this.contractDockArmed=true;return;}
+    const explicit=Phaser.Input.Keyboard.JustDown(this.contractKey)||Phaser.Input.Keyboard.JustDown(this.cursors.space!);
+    if((this.contractDockArmed||explicit)&&this.state.contracts.active)this.performContractBatch();
   }
+  private performContractBatch():void{this.contractDockArmed=false;const result=deliverContractBatch(this.state.contracts,this.state.cargo,this.state.barn);this.game.events.emit(GAME_EVENTS.hint,result.message);if(!result.changed)return;this.state={...this.state,contracts:result.state,cargo:result.cargo,barn:result.barn};this.farmer.setCargo(result.cargo.amounts,result.cargo.capacity);transferEffect(this,this.farmer.x,this.farmer.y,GAME_CONFIG.contractDock.x,GAME_CONFIG.contractDock.y);if(result.complete){const done=completeContract(this.state.contracts,this.state.economy.walletCoins);if(done.changed&&"reward" in done){this.state={...this.state,contracts:done.state,economy:{...this.state.economy,walletCoins:done.wallet,contractCoinsEarned:(this.state.economy.contractCoinsEarned??0)+done.reward.total}};this.emitState();this.game.events.emit(GAME_EVENTS.dirty,"priority");this.game.events.emit(GAME_EVENTS.contractOpen,done.reward);return;}}this.emitState();this.game.events.emit(GAME_EVENTS.dirty);}
   private handleContractAction(action:string,id?:string):void {
     if(action==="accept"&&id){const command=acceptContract(this.state.contracts,id,this.unlockedResources());this.state={...this.state,contracts:command.state};this.finishContractCommand(command.message,command.prioritySaveRequested);return;}
     if(action==="decline"&&id){const command=declineContractOffer(this.state.contracts,id,this.unlockedResources());this.state={...this.state,contracts:command.state};this.finishContractCommand(command.message,command.prioritySaveRequested);return;}

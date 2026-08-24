@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { harvestOne, restockMarketOne, unloadOne } from "./inventory";
 import { sellWheatToCustomer } from "./market";
-import { collectTillCoin } from "./economy";
+import { collectAllTillCoins } from "./economy";
 import {
   depositHarvestWorkerCargoOne,
   getAutomationWheatTotal,
@@ -76,7 +76,7 @@ describe("complete automation invariants", () => {
         soldUnits: 1,
         customersServed: 1,
       },
-      after = collectTillCoin(e);
+      after = collectAllTillCoins(e).economy;
     expect(after.walletCoins + after.tillCoins).toBe(
       e.walletCoins + e.tillCoins,
     );
