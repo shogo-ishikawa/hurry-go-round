@@ -28,7 +28,12 @@ async function position(page: Page, id: string): Promise<void> {
 
 async function openPanel(page: Page): Promise<void> {
   await position(page, "open-collection-panel");
-  await page.keyboard.press("e");
+  // Keep E down while advancing one real collection-system step. A short
+  // press can otherwise occur entirely between Phaser frames on slow CI or
+  // after a viewport resize, especially at 844x390.
+  await page.keyboard.down("e");
+  await advance(page, 50);
+  await page.keyboard.up("e");
   await expect.poll(async () => (await panel(page)).open).toBe(true);
 }
 
