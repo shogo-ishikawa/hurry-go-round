@@ -136,9 +136,16 @@ for (const viewport of [
     expect(
       panel.visibleText.some(
         (item) =>
-          item.visible && !item.clipped && item.text.includes("加工場では"),
+          item.visible && !item.clipped && item.text.includes("加工場の流れ"),
       ),
     ).toBe(true);
+
+    await page.keyboard.press("Escape");
+    await page.evaluate(() => window.__HGR_E2E__!.openProcessingPanel(1));
+    panel = await page.evaluate(() =>
+      window.__HGR_E2E__!.getProcessingPanel(),
+    );
+    expect(panel.pageName).toBe("レシピ帳");
 
     const reached = new Set<string>();
     for (let pageIndex = 0; pageIndex < 8; pageIndex += 1) {
@@ -148,6 +155,17 @@ for (const viewport of [
       panel.visibleText
         .filter((item) => item.visible && !item.clipped)
         .forEach((item) => reached.add(item.text));
+
+      expect(
+        panel.buttons.every(
+          (button) =>
+            button.x >= -1 &&
+            button.x + button.width <= viewport.width + 1 &&
+            button.y >= -1 &&
+            button.y + button.height <= viewport.height + 1 &&
+            button.height >= 44,
+        ),
+      ).toBe(true);
 
       const next = panel.buttons.find(
         (button) => button.label === "次へ" && button.enabled,
@@ -168,16 +186,13 @@ for (const viewport of [
 
     const all = [...reached].join(" ");
     expect(all).toContain("麦 2 → 小麦粉 1");
-    expect(all).toContain("コーンブレッド 1");
-    expect(
-      panel.buttons.every(
-        (button) =>
-          button.x >= -1 &&
-          button.x + button.width <= viewport.width + 1 &&
-          button.y >= -1 &&
-          button.y + button.height <= viewport.height + 1,
-      ),
-    ).toBe(true);
+    expect(all).toContain("とうもろこし 2 → コーンミール 1");
+    expect(all).toContain("小麦粉 1 + たまご 1 → パン 1");
+    expect(all).toContain(
+      "小麦粉 1 + コーンミール 1 + たまご 1 → コーンブレッド 1",
+    );
+    expect(all).not.toContain("mill-flour");
+    expect(all).not.toContain("bakery-bread");
 
     await page.keyboard.press("Tab");
     await page.keyboard.press("Shift+Tab");
