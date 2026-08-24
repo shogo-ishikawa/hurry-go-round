@@ -53,6 +53,16 @@ test("mixed cargo enters the barn once as an atomic batch and survives reload", 
   state = await page.evaluate(() => window.__HGR_E2E__!.getLogistics());
   expect(state.cargo.corn).toBe(2);
 
+  // Armed/re-entry state is deliberately transient and resets on load. Leave
+  // the delivery zone before saving so this assertion tests cargo persistence,
+  // rather than intentionally triggering a fresh delivery after reload.
+  await page.evaluate(() =>
+    window.__HGR_E2E__!.positionOutsideBarnDelivery(),
+  );
+  expect(
+    (await page.evaluate(() => window.__HGR_E2E__!.getLogistics())).cargo.corn,
+  ).toBe(2);
+
   await page.evaluate(() => window.__HGR_E2E__!.requestSave());
   await page.reload();
   await page.getByRole("button", { name: "つづきから" }).click();
