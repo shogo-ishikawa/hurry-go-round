@@ -3,7 +3,7 @@ import { createFarmWorld } from "../art/terrain";
 import { harvestEffect, transferEffect } from "../art/effects";
 import { calculateCameraZoom } from "../logic/camera";
 import { moveWithinBounds, type Point } from "../logic/movement";
-import { addCargoOne, getCarriedTotal, unloadNextCargoOne } from "../logic/resources";
+import { addCargoOne, getCarriedTotal, unloadCargoToBarnBatch } from "../logic/resources";
 import { getContinuousDragDirection } from "../logic/pointerNavigation";
 import { getHarvestIntervalForLevel } from "../logic/upgrades";
 import {
@@ -28,7 +28,7 @@ import { ExpansionSystem } from "../systems/ExpansionSystem";
 import { UIScene } from "./UIScene";
 import { ExpandedAutomationSystem } from "../systems/ExpandedAutomationSystem";
 import { acceptContract, advanceContractActiveTime, cancelActiveContract, completeContract, declineContractOffer, deliverContractBatch } from "../logic/contracts";
-import { emptyResourceAmounts, type ResourceId } from "../config/resourceDefinitions";
+import { emptyResourceAmounts, getResourceName, type ResourceId } from "../config/resourceDefinitions";
 import { palette } from "../art/palette";
 import type { PersistedGameSnapshot } from "../persistence/saveSchema";
 import { createPersistedSnapshot } from "../logic/saveSnapshot";
@@ -50,8 +50,7 @@ export class GameScene extends Phaser.Scene {
   >;
   private state: GameState = createGameState();
   private harvestCooldown = 0;
-  private unloadCooldown = 0;
-  private lastUnloadedResource: import("../config/resourceDefinitions").ResourceId | null = null;
+  private barnUnloadArmed = true;
   private fullNotified = false;
   private tutorialStage = 0;
   private ui?: UIScene;
@@ -145,7 +144,7 @@ export class GameScene extends Phaser.Scene {
     );
     this.expansion = new ExpansionSystem(this, this.farmer, () => this.state, (s) => this.setState(s));
     this.expandedAutomation = new ExpandedAutomationSystem(this, this.farmer, () => this.state, (s) => this.setState(s));
-    this.collectionSystem=new CollectionNetworkSystem(this,this.farmer,()=>this.state,(state)=>{this.state=state;},this.contractKey);
+    this.collectionSystem=new CollectionNetworkSystem(this,this.farmer,()=>this.state,(state)=>{this.state=state;},this.contractKey,this.cursors.space!);
     this.processingSystem=new ProcessingSystem(this,this.farmer,()=>this.state,(state)=>{this.state=state;},this.contractKey);
     this.dairySystem=new DairySystem(this,this.farmer,()=>this.state,(state)=>this.setState(state));
     this.runtimeReady = true;
@@ -183,7 +182,9 @@ export class GameScene extends Phaser.Scene {
   positionAtProcessingInteractionE2E(id:InteractionId):void{const interaction=INTERACTIONS.find(item=>item.id===id);if(!interaction)throw new Error(`Unknown interaction ${id}`);this.farmer.setPosition(interaction.center.x,interaction.center.y);}
   advanceProcessingE2E(deltaMs:number,stepMs=50):void{let remaining=Math.max(0,Math.min(120000,Math.floor(deltaMs)));const step=Math.max(1,Math.min(250,Math.floor(stepMs)));while(remaining>0){const delta=Math.min(step,remaining);this.processingSystem.advanceForE2E(delta);remaining-=delta;}}
   getProcessingE2ESummary(){return this.processingSystem.getDiagnostics();}
-  configureCollectionE2E(input:{coins?:number;processingYard?:boolean;eastField?:boolean;chickenCoop?:boolean;built?:boolean;sources?:Partial<Record<"wheat"|"corn"|"egg",number>>;processingBuilt?:boolean;processingEnabled?:boolean}):void{if(!this.runtimeReady)throw new Error("GameScene is not ready");const sources=input.sources??{},network=this.state.collectionNetwork,boxes={...network.boxes};for(const source of ["wheat","corn","egg"] as const)boxes[source]={...boxes[source],built:input.built??boxes[source].built,amounts:{...boxes[source].amounts,[source]:Math.max(0,Math.floor(sources[source]??boxes[source].amounts[source]))}};this.state={...this.state,economy:{...this.state.economy,walletCoins:Math.max(0,Math.floor(input.coins??this.state.economy.walletCoins))},landExpansion:{...this.state.landExpansion,eastCornFieldUnlocked:input.eastField??this.state.landExpansion.eastCornFieldUnlocked,southChickenCoopUnlocked:input.chickenCoop??this.state.landExpansion.southChickenCoopUnlocked},processing:{...this.state.processing,land:{...this.state.processing.land,yardUnlocked:input.processingYard??this.state.processing.land.yardUnlocked,millBuilt:input.processingBuilt??this.state.processing.land.millBuilt,bakeryBuilt:input.processingBuilt??this.state.processing.land.bakeryBuilt},mill:{...this.state.processing.mill,enabled:input.processingEnabled??this.state.processing.mill.enabled},bakery:{...this.state.processing.bakery,enabled:input.processingEnabled??this.state.processing.bakery.enabled}},collectionNetwork:{...network,hubBuilt:input.built??network.hubBuilt,boxes}};this.emitState();}
+  configureCollectionE2E(input:{coins?:number;processingYard?:boolean;eastField?:boolean;chickenCoop?:boolean;built?:boolean;sources?:Partial<Record<"wheat"|"corn"|"egg",number>>;cargo?:Partial<GameState["cargo"]["amounts"]>;cargoCapacity?:number;processingBuilt?:boolean;processingEnabled?:boolean}):void{if(!this.runtimeReady)throw new Error("GameScene is not ready");const sources=input.sources??{},network=this.state.collectionNetwork,boxes={...network.boxes};for(const source of ["wheat","corn","egg"] as const)boxes[source]={...boxes[source],built:input.built??boxes[source].built,amounts:{...boxes[source].amounts,[source]:Math.max(0,Math.floor(sources[source]??boxes[source].amounts[source]))}};this.state={...this.state,economy:{...this.state.economy,walletCoins:Math.max(0,Math.floor(input.coins??this.state.economy.walletCoins))},landExpansion:{...this.state.landExpansion,eastCornFieldUnlocked:input.eastField??this.state.landExpansion.eastCornFieldUnlocked,southChickenCoopUnlocked:input.chickenCoop??this.state.landExpansion.southChickenCoopUnlocked},processing:{...this.state.processing,land:{...this.state.processing.land,yardUnlocked:input.processingYard??this.state.processing.land.yardUnlocked,millBuilt:input.processingBuilt??this.state.processing.land.millBuilt,bakeryBuilt:input.processingBuilt??this.state.processing.land.bakeryBuilt},mill:{...this.state.processing.mill,enabled:input.processingEnabled??this.state.processing.mill.enabled},bakery:{...this.state.processing.bakery,enabled:input.processingEnabled??this.state.processing.bakery.enabled}},cargo:{...this.state.cargo,capacity:input.cargoCapacity??this.state.cargo.capacity,amounts:{...this.state.cargo.amounts,...input.cargo}},collectionNetwork:{...network,hubBuilt:input.built??network.hubBuilt,boxes}};this.farmer.setCargo(this.state.cargo.amounts,this.state.cargo.capacity);this.emitState();}
+  positionAtBarnDeliveryE2E():void{this.farmer.setPosition(GAME_CONFIG.delivery.x,GAME_CONFIG.delivery.y);this.tryUnload();}
+  positionOutsideBarnDeliveryE2E():void{this.farmer.setPosition(GAME_CONFIG.contractBoard.x,GAME_CONFIG.contractBoard.y);this.tryUnload();}
   positionAtCollectionInteractionE2E(id:InteractionId):void{this.positionAtProcessingInteractionE2E(id);this.collectionSystem.update(0);}
   advanceCollectionE2E(deltaMs:number,stepMs=50):void{this.collectionSystem.advanceForE2E(deltaMs,stepMs);this.emitState();}
   getCollectionE2ESummary(){return this.collectionSystem.getDiagnostics();}
@@ -224,7 +225,6 @@ export class GameScene extends Phaser.Scene {
     this.farmer.animate(delta, moving);
     for (const crop of this.crops) crop.tick(delta, time);
     this.harvestCooldown = Math.max(0, this.harvestCooldown - delta);
-    this.unloadCooldown = Math.max(0, this.unloadCooldown - delta);
     this.tryHarvest();
     this.tryUnload();
     this.market.update(delta);
@@ -339,7 +339,7 @@ export class GameScene extends Phaser.Scene {
   private endPointer(pointer: Phaser.Input.Pointer): void {
     if (!this.dragStart) return; const wasDragging = this.dragging;
     this.dragStart = null; this.dragging = false; this.dragDirection = { x: 0, y: 0 };
-    if (wasDragging) this.cancelPointTarget(); else this.setPointTarget(pointer);
+    if (wasDragging) this.cancelPointTarget(); else { const world=this.cameras.main.getWorldPoint(pointer.x,pointer.y),tappedDelivery=Phaser.Math.Distance.Between(world.x,world.y,GAME_CONFIG.delivery.x,GAME_CONFIG.delivery.y)<=GAME_CONFIG.delivery.radius,insideDelivery=Phaser.Math.Distance.Between(this.farmer.x,this.farmer.y,GAME_CONFIG.delivery.x,GAME_CONFIG.delivery.y)<=GAME_CONFIG.delivery.radius; if(tappedDelivery&&insideDelivery){this.barnUnloadArmed=true;this.tryUnload();}else this.setPointTarget(pointer); }
   }
   private cancelPointTarget(): void {
     this.pointTarget = null;
@@ -411,21 +411,20 @@ export class GameScene extends Phaser.Scene {
         GAME_CONFIG.delivery.x,
         GAME_CONFIG.delivery.y,
       ) <= GAME_CONFIG.delivery.radius;
-    if (
-      !inZone ||
-      this.unloadCooldown > 0 ||
-      getCarriedTotal(this.state.cargo) === 0
-    )
-      return;
-    const result = unloadNextCargoOne(this.state.cargo, this.state.barn, this.lastUnloadedResource);
+    if (!inZone) { this.barnUnloadArmed = true; return; }
+    const explicit = Phaser.Input.Keyboard.JustDown(this.contractKey) || Phaser.Input.Keyboard.JustDown(this.cursors.space!);
+    if ((!this.barnUnloadArmed && !explicit) || getCarriedTotal(this.state.cargo) === 0) return;
+    this.barnUnloadArmed = false;
+    const result = unloadCargoToBarnBatch(this.state.cargo, this.state.barn);
     if (!result.changed) return;
-    this.lastUnloadedResource = result.resource;
-    this.state = { ...this.state, cargo: result.cargo, barn: result.destination, deliveredOnce: true };
-    this.unloadCooldown = GAME_CONFIG.unloadIntervalMs;
+    this.state = { ...this.state, cargo: result.cargo, barn: result.barn, deliveredOnce: true };
     this.fullNotified = false;
     this.farmer.setCargo(result.cargo.amounts, result.cargo.capacity);
     transferEffect(this, this.farmer.x, this.farmer.y, 1520, 480);
-    this.emitState();
+    const details=result.breakdown.map(({resource,amount})=>`${getResourceName(resource)} ${amount}`).join("\n");
+    this.game.events.emit(GAME_EVENTS.hint,`倉庫へ${result.totalMoved}個納品しました\n${details}`);
+    this.game.events.emit(GAME_EVENTS.state,this.state);
+    this.game.events.emit(GAME_EVENTS.dirty,"priority");
     this.setTutorial(3);
   }
   private setState(state: GameState): void {

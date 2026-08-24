@@ -30,5 +30,30 @@ export function unloadNextCargoOne(cargo: CarriedCargo, barn: ResourceAmounts, a
   return { cargo, destination: barn, changed: false, reason: "empty" as const, resource: null };
 }
 
+export interface CargoToBarnBatchResult {
+  changed: boolean;
+  cargo: CarriedCargo;
+  barn: ResourceAmounts;
+  breakdown: Array<{ resource: ResourceId; amount: number }>;
+  totalMoved: number;
+}
+
+/** Moves one complete mixed load in stable resource order without mutating either input. */
+export function unloadCargoToBarnBatch(cargo: CarriedCargo, barn: ResourceAmounts): CargoToBarnBatchResult {
+  const breakdown = RESOURCE_IDS.flatMap((resource) => {
+    const amount = Math.max(0, Math.floor(cargo.amounts[resource]));
+    return amount > 0 ? [{ resource, amount }] : [];
+  });
+  const totalMoved = breakdown.reduce((sum, item) => sum + item.amount, 0);
+  if (totalMoved === 0) return { changed: false, cargo, barn, breakdown, totalMoved };
+  const nextAmounts = { ...cargo.amounts };
+  const nextBarn = { ...barn };
+  for (const { resource, amount } of breakdown) {
+    nextAmounts[resource] = 0;
+    nextBarn[resource] += amount;
+  }
+  return { changed: true, cargo: { ...cargo, amounts: nextAmounts }, barn: nextBarn, breakdown, totalMoved };
+}
+
 // Descriptive aliases retained for call sites while the state has one authoritative cargo owner.
 export const collectResourceOne = addCargoOne;
