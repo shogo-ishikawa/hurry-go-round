@@ -59,5 +59,13 @@ export const FARM_LAYOUT = Object.freeze({
 });
 
 export const getActiveWheatNodes = (level: WheatFieldLevel) => FARM_LAYOUT.wheatNodes.filter((node) => node.expansionLevel <= level);
-export const getActiveWheatBounds = (level: WheatFieldLevel): Rect => ({ ...FARM_LAYOUT.wheatField.bounds, width: [430, 595, 760][level] });
+export const WHEAT_CROP_VISUAL_RADIUS = Object.freeze({ x: 18, y: 40 });
+export const WHEAT_FIELD_VISUAL_MARGIN = Object.freeze({ x: 32, y: 28 });
+export function getWheatFieldVisualBounds(level: WheatFieldLevel, nodes: readonly WheatNodeDefinition[] = getActiveWheatNodes(level), cropVisualRadius = WHEAT_CROP_VISUAL_RADIUS, margin = WHEAT_FIELD_VISUAL_MARGIN): Rect {
+  const active=nodes.filter(node=>node.expansionLevel<=level);
+  if(active.length===0)throw new Error("Wheat field requires at least one active node");
+  const xs=active.map(node=>node.x),ys=active.map(node=>node.y);
+  return{x:Math.min(...xs)-cropVisualRadius.x-margin.x,y:Math.min(...ys)-cropVisualRadius.y-margin.y,width:Math.max(...xs)-Math.min(...xs)+cropVisualRadius.x*2+margin.x*2,height:Math.max(...ys)-Math.min(...ys)+cropVisualRadius.y*2+margin.y*2};
+}
+export const getActiveWheatBounds = getWheatFieldVisualBounds;
 export const rectanglesOverlap = (a: Rect, b: Rect): boolean => a.x < b.x + b.width && a.x + a.width > b.x && a.y < b.y + b.height && a.y + a.height > b.y;

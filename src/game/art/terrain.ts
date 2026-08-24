@@ -3,7 +3,6 @@ import { palette } from "./palette";
 import { GAME_CONFIG } from "../config/gameConfig";
 import { WorldSign } from "../entities/WorldSign";
 import { UI_TEXT } from "../config/localization";
-import { FARM_LAYOUT, getActiveWheatBounds, type WheatFieldLevel } from "../config/farmLayout";
 
 function tree(scene: Phaser.Scene, x: number, y: number, scale = 1): void {
   const c = scene.add.container(x, y).setDepth(y + 70);
@@ -36,7 +35,7 @@ function tree(scene: Phaser.Scene, x: number, y: number, scale = 1): void {
   c.add([shadow, trunk, crown, light]);
 }
 
-export function createFarmWorld(scene: Phaser.Scene, wheatLevel: WheatFieldLevel = 0): void {
+export function createFarmWorld(scene: Phaser.Scene): void {
   const g = scene.add.graphics().setDepth(-1000);
   g.fillStyle(palette.grass).fillRect(
     0,
@@ -75,20 +74,6 @@ export function createFarmWorld(scene: Phaser.Scene, wheatLevel: WheatFieldLevel
   g.fillStyle(palette.grassDark)
     .fillCircle(290, 1035, 14)
     .fillCircle(575, 1128, 17);
-  // One staged, contiguous wheat field. Inactive strips remain muted planned land.
-  const field = FARM_LAYOUT.wheatField;
-  g.fillStyle(palette.pathLight,.85).fillRoundedRect(FARM_LAYOUT.farmPath.x,FARM_LAYOUT.farmPath.y,FARM_LAYOUT.farmPath.width,FARM_LAYOUT.farmPath.height,30);
-  g.fillStyle(palette.soilDark, 0.18).fillRoundedRect(field.bounds.x, field.bounds.y, field.bounds.width, field.bounds.height, 28);
-  for (const planned of [field.expansion1Bounds, field.expansion2Bounds])
-    g.fillStyle(palette.creamDark, 0.22).fillRoundedRect(planned.x, planned.y, planned.width, planned.height, 18);
-  const active = getActiveWheatBounds(wheatLevel);
-  g.fillStyle(palette.soil).fillRoundedRect(active.x, active.y, active.width, active.height, 28);
-  g.lineStyle(5, palette.soilDark, 0.45);
-  for (let yy = active.y + 50; yy < active.y + active.height; yy += 50)
-    g.lineBetween(active.x + 24, yy, active.x + active.width - 24, yy);
-  // A single fence grows around the authoritative active rectangle.
-  g.lineStyle(10, palette.creamDark).strokeRoundedRect(active.x, active.y, active.width, active.height, 28);
-  g.lineStyle(3, palette.outline, 0.7).strokeRoundedRect(active.x, active.y, active.width, active.height, 28);
   // flower clusters
   for (const [x, y] of [
     [920, 280],
