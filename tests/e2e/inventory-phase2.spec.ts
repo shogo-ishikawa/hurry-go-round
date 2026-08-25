@@ -161,6 +161,16 @@ for (const viewport of [
             button.y + button.height <= viewport.height + 1,
         ),
       ).toBe(true);
+      expect(
+        panel.sliders.every(
+          (slider) =>
+            slider.height >= 44 &&
+            slider.x >= -1 &&
+            slider.x + slider.width <= viewport.width + 1 &&
+            slider.y >= -1 &&
+            slider.y + slider.height <= viewport.height + 1,
+        ),
+      ).toBe(true);
 
       for (const item of panel.visibleText) {
         if (item.visible && !item.clipped) reached.add(item.text);
@@ -184,9 +194,11 @@ for (const viewport of [
     }
 
     const text = [...reached].join(" ");
-    expect(text).toContain("入力バッファ");
-    expect(text).toContain("加工中に予約済み");
-    expect(text).toContain("完成品バッファ");
+    expect(text).toContain("仕込み計画");
+    expect(text).toContain("必要素材目標");
+    expect(text).toContain("入力庫");
+    expect(text).toContain("加工中");
+    expect(text).toContain("完成品");
     expect(text).toContain("小麦粉");
     expect(text).not.toContain("mill-flour");
   });
