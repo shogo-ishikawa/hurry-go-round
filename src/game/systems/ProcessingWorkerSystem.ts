@@ -1,4 +1,5 @@
 import Phaser from "phaser";
+import "../scenes/installProcessingStaffControls";
 import type { GameState } from "../state/GameState";
 import { getProcessingWorkerCapacity, moveProcessingOutputToBarn, type ProcessingWorkerRole } from "../logic/processingWorkers";
 import type { ProcessingMachineState } from "../logic/processing";
