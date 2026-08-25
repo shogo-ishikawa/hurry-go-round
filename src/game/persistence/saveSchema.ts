@@ -7,8 +7,8 @@ import type { CollectionNetwork } from "../logic/collectionNetwork";
 import type { DairyState } from "../logic/dairy";
 
 export const SAVE_FORMAT = "hurry-go-round-save" as const;
-export const SAVE_SCHEMA_VERSION = 9 as const;
-export const GAME_VERSION = "0.9.8";
+export const SAVE_SCHEMA_VERSION = 10 as const;
+export const GAME_VERSION = "0.9.9";
 
 export interface PersistedSettings {
   textScale: 1 | 1.15 | 1.3;

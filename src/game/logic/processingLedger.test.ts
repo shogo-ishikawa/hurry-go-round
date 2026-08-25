@@ -1,0 +1,9 @@
+import {describe,expect,it} from "vitest";
+import {advanceProductionCycle,collectAllManualOutput,createMachine,startProductionCycle,type ProcessingMachineState} from "./processing";
+import {emptyResourceAmounts} from "../config/resourceDefinitions";
+
+describe("processing production ledger",()=>{
+ it("preserves the Phase 1 and Phase 2 default plans for new games",()=>{expect(createMachine("grain-mill").recipeTargetCycles).toEqual({"mill-flour":6,"mill-cornmeal":6});expect(createMachine("bakery").recipeTargetCycles).toEqual({"bakery-bread":3,"bakery-cornbread":3});});
+ it("attributes completions atomically and bounds newest-first history",()=>{let machine:ProcessingMachineState={...createMachine("grain-mill"),built:true,level:1,output:{...createMachine("grain-mill").output,capacity:99}};for(let n=0;n<22;n++){machine.input.amounts.wheat+=2;machine=startProductionCycle({...machine,selectedMode:"mill-flour"},"grain-mill",[]).machine;machine=advanceProductionCycle(machine,9999,`2026-01-01T00:00:${String(n).padStart(2,"0")}Z`).machine;}expect(machine.completedByRecipe["mill-flour"]).toBe(22);expect(machine.currentPlanCompletedCycles["mill-flour"]).toBe(22);expect(machine.recentHistory).toHaveLength(20);expect(machine.lastCompletion?.sequence).toBe(22);expect(machine.recentHistory[0]?.sequence).toBe(22);});
+ it("collects mixed output once up to exact cargo capacity",()=>{const machine=createMachine("grain-mill");machine.output.amounts.flour=4;machine.output.amounts.cornmeal=3;const cargo={amounts:emptyResourceAmounts(),capacity:5};const result=collectAllManualOutput(machine,"grain-mill",cargo);expect(result.totalMoved).toBe(5);expect(Object.values(result.machine.output.amounts).reduce((a,b)=>a+b,0)).toBe(2);expect(Object.values(result.cargo.amounts).reduce((a,b)=>a+b,0)).toBe(5);});
+});
