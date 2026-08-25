@@ -113,14 +113,14 @@ test("moves ingredients through real mill and bakery cycles and collection", asy
   await configure(page, 2000, { wheat: 2, corn: 2 });
   await at(page, "transfer-mill-input", 700);
 
-  // Automatic operation starts as soon as two wheat have arrived. The wheat is
-  // therefore reserved by the active flour cycle rather than remaining in the
-  // visible input buffer. Corn remains buffered for the next cycle.
+  // Phase 2 transfers every available planned deficit atomically. Both wheat
+  // and corn leave the player cargo in one station transaction. The mill then
+  // reserves the wheat for flour while the corn remains buffered.
   expect(await diagnostics(page)).toMatchObject({
     playerCargo: { wheat: 0, corn: 0 },
     millInput: { wheat: 0, corn: 2 },
     millActiveRecipe: "mill-flour",
-    lastManualInputResource: "corn",
+    activeTransferInteraction: "transfer-mill-input",
   });
 
   await advance(page, 4300);
@@ -134,10 +134,14 @@ test("moves ingredients through real mill and bakery cycles and collection", asy
 
   await configure(page, 2000, { flour: 1, egg: 1 });
   await at(page, "transfer-bakery-input", 360);
+
+  // Flour and egg are likewise supplied as one atomic planned batch. They are
+  // immediately reserved by the bread cycle, so the observable contract is
+  // empty cargo plus the active recipe rather than a legacy "last item" value.
   expect(await diagnostics(page)).toMatchObject({
     playerCargo: { flour: 0, egg: 0 },
     bakeryActiveRecipe: "bakery-bread",
-    lastManualInputResource: "egg",
+    activeTransferInteraction: "transfer-bakery-input",
   });
 
   await advance(page, 5600);
