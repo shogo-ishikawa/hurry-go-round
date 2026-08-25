@@ -1,5 +1,5 @@
 import { emptyResourceAmounts, RESOURCE_MARKET_CAPACITIES, type ResourceAmounts } from "../config/resourceDefinitions";
-import { createMachine } from "../logic/processing";
+import { createMachine, RECIPES, type MachineId, type ProcessingMachineState, type RecipeId } from "../logic/processing";
 import { createCollectionNetwork } from "../logic/collectionNetwork";
 import { createDairyState, createPastureNodes } from "../logic/dairy";
 import { checksumPayload, verifyChecksum } from "./checksum";
@@ -38,9 +38,18 @@ function migrateSchema8Wheat(payload:PersistedGameSnapshot):PersistedGameSnapsho
  for(const crop of payload.crops){if(!crop.id.startsWith("wheat-"))continue;const id=mapSchema8WheatId(crop.id);if(id&&!byId.has(id))byId.set(id,{...crop,id,remainingMs:normalizeDurationMs(crop.remainingMs)});}
  return {...payload,crops:expected.map(node=>byId.get(node.id)??{id:node.id,resource:"wheat",state:"ready",remainingMs:0})};
 }
+function migrateProcessingLedger(payload:PersistedGameSnapshot):PersistedGameSnapshot {
+ const processing=structuredClone(payload.processing);
+ const migrateMachine=(id:MachineId,old:ProcessingMachineState):ProcessingMachineState=>{
+  const defaults=createMachine(id),recipes=Object.values(RECIPES).filter(recipe=>recipe.machine===id).map(recipe=>recipe.id),targets:Partial<Record<RecipeId,number>>={};
+  for(const recipe of recipes)targets[recipe]=old.selectedMode==="auto"||old.selectedMode===recipe?1:0;
+  return {...defaults,...old,input:structuredClone(old.input),output:structuredClone(old.output),activeCycle:old.activeCycle?structuredClone(old.activeCycle):null,recipeTargetCycles:targets,currentPlanCompletedCycles:{},completedByRecipe:{...defaults.completedByRecipe},legacyUnattributedCycles:old.completedCycles,lastCompletion:null,recentHistory:[],completionMode:"repeat",supplyMode:"cargo-first",autoBalance:0};
+ };
+ return {...payload,processing:{...processing,mill:migrateMachine("grain-mill",processing.mill),bakery:migrateMachine("bakery",processing.bakery)}};
+}
 export async function migrateSaveEnvelope(input:unknown):Promise<ValidationResult<SaveEnvelope>>{
- if(!object(input)||typeof input.schemaVersion!=="number")return{ok:false,errors:["schema version missing"]};if(input.schemaVersion>SAVE_SCHEMA_VERSION)return{ok:false,errors:["このセーブデータは新しいバージョンで作成されています"]};if(input.schemaVersion===SAVE_SCHEMA_VERSION){const validated=await validateEnvelope(input);if(!validated.ok)return validated;if(validated.value.payload.contracts.declineCooldownMs<=0)return validated;const payload=structuredClone(validated.value.payload);payload.contracts.declineCooldownMs=0;const envelope={...validated.value,payload,checksum:await checksumPayload(payload)};return{ok:true,value:envelope,warnings:["旧式の契約見送り待ち時間を解除しました"]};}if(![1,2,3,4,5,6,7,8].includes(input.schemaVersion)||!object(input.payload)||typeof input.checksum!=="string")return{ok:false,errors:["unsupported schema version"]};if(!(await verifyChecksum(input.payload,input.checksum)))return{ok:false,errors:["checksum mismatch"]};
+ if(!object(input)||typeof input.schemaVersion!=="number")return{ok:false,errors:["schema version missing"]};if(input.schemaVersion>SAVE_SCHEMA_VERSION)return{ok:false,errors:["このセーブデータは新しいバージョンで作成されています"]};if(input.schemaVersion===SAVE_SCHEMA_VERSION){const validated=await validateEnvelope(input);if(!validated.ok)return validated;if(validated.value.payload.contracts.declineCooldownMs<=0)return validated;const payload=structuredClone(validated.value.payload);payload.contracts.declineCooldownMs=0;const envelope={...validated.value,payload,checksum:await checksumPayload(payload)};return{ok:true,value:envelope,warnings:["旧式の契約見送り待ち時間を解除しました"]};}if(![1,2,3,4,5,6,7,8,9].includes(input.schemaVersion)||!object(input.payload)||typeof input.checksum!=="string")return{ok:false,errors:["unsupported schema version"]};if(!(await verifyChecksum(input.payload,input.checksum)))return{ok:false,errors:["checksum mismatch"]};
  let old=structuredClone(input.payload) as Record<string,unknown>;const warnings:string[]=[];
  if(input.schemaVersion===1){if(!object(old.workers))return{ok:false,errors:["invalid worker state"]};const workers:Record<string,unknown>={};for(const [key,value] of Object.entries(old.workers)){if(!object(value)||typeof value.hired!=="boolean"||typeof value.carried!=="number")return{ok:false,errors:["invalid worker state"]};workers[key]={...value,level:value.hired?1:0,carried:Math.max(0,value.carried)}}old={...old,workers,operations:{lastSelectedFacilityId:null,compactAutomationHud:false,completedInteractionTutorials:[]}};warnings.push("schema 1 を schema 2 へ移行しました")}
- const resources=migrateResources(old);const payload=migrateSchema8Wheat(resources);const envelope={...input,schemaVersion:SAVE_SCHEMA_VERSION,gameVersion:GAME_VERSION,payload,checksum:await checksumPayload(payload)} as SaveEnvelope;const validated=await validateEnvelope(envelope);return validated.ok?{...validated,warnings:[...warnings,"schema 9 の統合麦畑へ移行しました"]}:validated;
+ const resources=migrateResources(old);const payload=migrateProcessingLedger(migrateSchema8Wheat(resources));const envelope={...input,schemaVersion:SAVE_SCHEMA_VERSION,gameVersion:GAME_VERSION,payload,checksum:await checksumPayload(payload)} as SaveEnvelope;const validated=await validateEnvelope(envelope);return validated.ok?{...validated,warnings:[...warnings,"schema 10 の加工生産台帳へ移行しました"]}:validated;
 }
