@@ -8,17 +8,16 @@ import {
   getProcessingConstructionAvailability,
   purchaseProcessingYard,
   startProductionCycle,
-  transferManualInputOne,
   type MachineId,
   type RecipeId,
 } from "../logic/processing";
 import type { GameState } from "../state/GameState";
 import { GAME_EVENTS } from "../state/GameState";
 import { routeIntakeResourceOne } from "../logic/collectionNetwork";
-import { DEFAULT_PROCESSING_PLANS, type RecipePlan } from "../logic/processingPlan";
+import { DEFAULT_PROCESSING_PLANS, diagnoseProcessingBuffer, emptyProcessingInputToBarn, rebalanceProcessingInput, selectPlannedRecipe, transferBarnToProcessingTargets, transferCargoToProcessingTargets, type ProcessingSupplyMode, type RecipePlan } from "../logic/processingPlan";
 import { ProcessingFacilityView } from "./ProcessingFacilityView";
 import { ProcessingWorkerSystem } from "./ProcessingWorkerSystem";
-import { hireProcessingWorker, moveProcessingOutputToBarn, refillOneProcessingCycleFromBarn, trainProcessingWorker, type ProcessingWorkerRole } from "../logic/processingWorkers";
+import { hireProcessingWorker, moveProcessingOutputToBarn, trainProcessingWorker, type ProcessingWorkerRole } from "../logic/processingWorkers";
 
 type TransferDirection = "input" | "output";
 type TransferStationId =
@@ -49,10 +48,8 @@ export class ProcessingSystem {
   private activeTransferInteraction: InteractionId | null = null;
   private panelInRange = false;
   private plans:Record<MachineId,RecipePlan>={"grain-mill":structuredClone(DEFAULT_PROCESSING_PLANS["grain-mill"]),bakery:structuredClone(DEFAULT_PROCESSING_PLANS.bakery)};
-  private inputCursor: Record<MachineId, number> = {
-    "grain-mill": 0,
-    bakery: 0,
-  };
+  private supplyModes:Record<MachineId,ProcessingSupplyMode>={"grain-mill":"cargo-first",bakery:"cargo-first"};
+  private inputSignatures:Record<MachineId,string|null>={"grain-mill":null,bakery:null};
   private outputCursor: Record<MachineId, number> = {
     "grain-mill": 0,
     bakery: 0,
@@ -124,14 +121,15 @@ export class ProcessingSystem {
 
     let mill = advanceProductionCycle(state.processing.mill, delta).machine;
     let bakery = advanceProductionCycle(state.processing.bakery, delta).machine;
-    mill = startProductionCycle(mill, "grain-mill", (["mill-flour","mill-cornmeal"] as RecipeId[]).filter(id=>(this.plans["grain-mill"].targetCyclesByRecipe[id]??0)>0)).machine;
-    bakery = startProductionCycle(bakery, "bakery", (["bakery-bread","bakery-cornbread"] as RecipeId[]).filter(id=>(this.plans.bakery.targetCyclesByRecipe[id]??0)>0)).machine;
+    const millRecipe=selectPlannedRecipe("grain-mill",mill,this.plans["grain-mill"]),bakeryRecipe=selectPlannedRecipe("bakery",bakery,this.plans.bakery);
+    mill = startProductionCycle(mill, "grain-mill", millRecipe?[millRecipe]:[]).machine;
+    bakery = startProductionCycle(bakery, "bakery", bakeryRecipe?[bakeryRecipe]:[]).machine;
 
     state = {
       ...state,
       processing: { ...state.processing, mill, bakery },
     };
-    state = this.workers.update(state, delta);
+    state = this.workers.update(state, delta,this.plans);
     this.setState(state);
     this.view.update(state, delta);
     this.updateHold(delta);
@@ -282,6 +280,7 @@ export class ProcessingSystem {
     if (selectedInteraction !== this.activeTransferInteraction) {
       this.activeTransferInteraction = selectedInteraction;
       this.transferCooldown = 0;
+      if(selected?.[2]==="input")this.inputSignatures[selected[1]]=null;
     }
 
     if (!selected) {
@@ -304,67 +303,17 @@ export class ProcessingSystem {
       return;
     }
 
-    const beforeCargo = state.cargo.amounts;
-    const directionCursor =
-      direction === "input" ? this.inputCursor[id] : this.outputCursor[id];
-    const result =
-      direction === "input"
-        ? transferManualInputOne(
-            state.processing[key],
-            id,
-            state.cargo,
-            directionCursor,
-          )
-        : collectManualOutputOne(
-            state.processing[key],
-            id,
-            state.cargo,
-            directionCursor,
-          );
-
-    if (result.changed) {
-      const resource = result.resource;
-      if (!resource) {
-        throw new Error("Changed processing transfer did not identify a resource");
-      }
-
-      if (direction === "input") {
-        this.inputCursor[id] = result.nextCursor;
-        this.lastManualInputResource = resource;
-      } else {
-        this.outputCursor[id] = result.nextCursor;
-        this.lastManualOutputResource = resource;
-      }
-
-      this.setState({
-        ...state,
-        cargo: result.cargo,
-        processing: {
-          ...state.processing,
-          [key]: result.machine,
-        },
-      });
-      this.transferCooldown = 160;
-      this.scene.game.events.emit(
-        GAME_EVENTS.hint,
-        `${direction === "input" ? "搬入中　" : "回収中　"}${resource}\n持ち物 ${
-          beforeCargo[resource]
-        } → ${result.cargo.amounts[resource]}`,
-      );
-      this.publish();
+    if(direction==="input"){
+      const diagnosis=diagnoseProcessingBuffer(id,state.processing[key],this.plans[id]),signature=JSON.stringify([diagnosis.deficit,state.cargo.amounts]);
+      if(this.inputSignatures[id]===signature)return;this.inputSignatures[id]=signature;
+      const result=transferCargoToProcessingTargets(id,state.processing[key],this.plans[id],state.cargo);
+      if(result.changed){this.setState({...state,cargo:result.cargo!,processing:{...state.processing,[key]:result.machine}});this.scene.game.events.emit(GAME_EVENTS.hint,`計画まで ${result.totalMoved}個を搬入（残り不足 ${Object.values(result.remainingDeficit).reduce((a,b)=>a+b,0)}）`);this.publish();}
+      else this.scene.game.events.emit(GAME_EVENTS.hint,"計画の不足素材を持っていません");
       return;
     }
-
-    const reason =
-      result.reason === "buffer-full"
-        ? `${id === "grain-mill" ? "製粉機" : "ベーカリー"}の原料置き場が満杯です`
-        : result.reason === "cargo-full"
-          ? "持ち物がいっぱいです"
-          : direction === "input"
-            ? "対応する原料を持っていません"
-            : "完成品はまだありません";
-    this.scene.game.events.emit(GAME_EVENTS.hint, reason);
-    this.transferCooldown = 600;
+    const result=collectManualOutputOne(state.processing[key],id,state.cargo,this.outputCursor[id]);
+    if(result.changed){this.outputCursor[id]=result.nextCursor;this.lastManualOutputResource=result.resource??null;this.setState({...state,cargo:result.cargo,processing:{...state.processing,[key]:result.machine}});this.transferCooldown=160;this.scene.game.events.emit(GAME_EVENTS.hint,`回収中　${result.resource}`);this.publish();return;}
+    this.scene.game.events.emit(GAME_EVENTS.hint,result.reason==="cargo-full"?"持ち物がいっぱいです":"完成品はまだありません");this.transferCooldown=600;
   }
 
   private updatePanel(): void {
@@ -380,7 +329,7 @@ export class ProcessingSystem {
     }
   }
 
-  private handlePanelAction = (machine: MachineId|ProcessingWorkerRole, mode: "auto" | "stop" | RecipeId|"hire"|"train"|"refill"|"collect"|"plan", recipeId?:RecipeId, cycles?:number): void => {
+  private handlePanelAction = (machine: MachineId|ProcessingWorkerRole, mode: "auto" | "stop" | RecipeId|"hire"|"train"|"refill"|"collect"|"plan"|"align"|"empty"|ProcessingSupplyMode, recipeId?:RecipeId, cycles?:number): void => {
     const state = this.getState();
     if(machine==="millOperator"||machine==="baker"){
       const worker=state.processing[machine],result=mode==="hire"?hireProcessingWorker(machine,worker,state.economy.walletCoins):trainProcessingWorker(machine,worker,state.economy.walletCoins);
@@ -388,12 +337,13 @@ export class ProcessingSystem {
       if(result.ok)this.publish(true);this.scene.game.events.emit(GAME_EVENTS.processingResult,{changed:result.ok,message:result.ok?"スタッフの手続きが完了しました":"条件またはコインが足りません",prioritySaveRequested:result.ok});return;
     }
     if(mode==="plan"&&recipeId&&cycles!==undefined){this.plans[machine as MachineId]={targetCyclesByRecipe:{...this.plans[machine as MachineId].targetCyclesByRecipe,[recipeId]:cycles}};return;}
+    if(["cargo-first","barn-first","cargo-only","barn-only"].includes(mode)){this.supplyModes[machine as MachineId]=mode as ProcessingSupplyMode;this.scene.game.events.emit(GAME_EVENTS.processingResult,{changed:true,message:`供給モード：${mode}`,prioritySaveRequested:false});return;}
     const key = machine === "grain-mill" ? "mill" : "bakery";
     const current = state.processing[key];
-    if(mode==="refill"||mode==="collect"){
-      const result=mode==="refill"?refillOneProcessingCycleFromBarn(machine,current,state.barn):moveProcessingOutputToBarn(current,state.barn);
-      if(result.changed)this.setState({...state,barn:result.barn,processing:{...state.processing,[key]:result.machine}});
-      if(result.changed)this.publish(true);this.scene.game.events.emit(GAME_EVENTS.processingResult,{changed:result.changed,message:result.changed?`${result.totalMoved}個をまとめて移動しました`:"移動できる商品がありません",prioritySaveRequested:result.changed});return;
+    if(mode==="refill"||mode==="collect"||mode==="align"||mode==="empty"){
+      const result=mode==="collect"?moveProcessingOutputToBarn(current,state.barn):mode==="refill"?transferBarnToProcessingTargets(machine,current,this.plans[machine],state.barn):mode==="empty"?emptyProcessingInputToBarn(machine,current,this.plans[machine],state.barn):rebalanceProcessingInput(machine,current,this.plans[machine],state.cargo,state.barn,this.supplyModes[machine]);
+      if(result.changed)this.setState({...state,cargo:"cargo" in result&&result.cargo?result.cargo:state.cargo,barn:result.barn??state.barn,processing:{...state.processing,[key]:result.machine}});
+      if(result.changed)this.publish(true);const remaining="remainingDeficit" in result?Object.values(result.remainingDeficit).reduce((a,b)=>a+b,0):0;this.scene.game.events.emit(GAME_EVENTS.processingResult,{changed:result.changed,message:result.changed?`${result.totalMoved}個を移動しました（残り不足 ${remaining}）`:"移動できる資源がありません",prioritySaveRequested:result.changed});return;
     }
     this.setState({
       ...state,
