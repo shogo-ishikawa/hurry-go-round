@@ -176,3 +176,51 @@ test("visible panel actions fill the full plan from the barn and return all wait
   expect(rows.get("麦")?.barn).toBe(12);
   expect(rows.get("とうもろこし")?.barn).toBe(12);
 });
+
+test("processing staff can be hired and trained from the visible staff page", async ({
+  page,
+}) => {
+  await ready(page);
+  await buildAll(page);
+  await configureProcessing(page, 10_000);
+
+  await page.evaluate(() => window.__HGR_E2E__!.openProcessingPanel(5));
+  await expect.poll(async () => (await processingPanel(page)).pageName).toBe(
+    "スタッフ",
+  );
+
+  await clickPanelButton(page, "製粉 雇用 450");
+  await expect
+    .poll(async () => (await processingDiagnostics(page)).walletCoins)
+    .toBe(9550);
+  await expect.poll(async () => (await processingPanel(page)).pageName).toBe(
+    "スタッフ",
+  );
+
+  await clickPanelButton(page, "製パン 雇用 700");
+  await expect
+    .poll(async () => (await processingDiagnostics(page)).walletCoins)
+    .toBe(8850);
+
+  await clickPanelButton(page, "製粉 研修 420");
+  await expect
+    .poll(async () => (await processingDiagnostics(page)).walletCoins)
+    .toBe(8430);
+
+  await clickPanelButton(page, "製パン 研修 650");
+  await expect
+    .poll(async () => (await processingDiagnostics(page)).walletCoins)
+    .toBe(7780);
+
+  const panel = await processingPanel(page);
+  expect(panel.pageName).toBe("スタッフ");
+  const visibleText = panel.visibleText
+    .filter((item) => item.visible && !item.clipped)
+    .map((item) => item.text)
+    .join(" ");
+  expect(visibleText).toContain("製粉スタッフ Lv2");
+  expect(visibleText).toContain("容量 12");
+  expect(visibleText).toContain("製パンスタッフ Lv2");
+  expect(visibleText).toContain("容量 9");
+  expect(panel.buttons.every((button) => button.height >= 44)).toBe(true);
+});
